@@ -25,27 +25,19 @@ async def start(update, context):
 
 # /bitir komutu
 async def finish(update, context):
-    user_id = update.message.from_user.id
+    chat_id = update.message.chat_id
     removed = 0
     for game in [number_game.user_games, plate_game.user_games, fill_game.games]:
-        if game.get(update.message.chat_id):
-            del game[update.message.chat_id]
+        if chat_id in game:
+            del game[chat_id]
             removed += 1
     await update.message.reply_text(f"✅ Oyun(lar) sona erdirildi. {removed} oyun kapatıldı.")
 
-# Bot uygulaması
-app = ApplicationBuilder().token(TOKEN).build()
-
-# Komutlar
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("bitir", finish))
-
-# CallbackQueryHandler
+# Buton handler
 async def button_handler(update, context):
     query = update.callback_query
     await query.answer()
-    chat_id = query.message.chat_id
-
+    
     if query.data == "fill":
         await fill_game.start_fill(update, context)
     elif query.data == "sayi":
@@ -57,6 +49,14 @@ async def button_handler(update, context):
     elif query.data == "dogruluk":
         await truth_game.truth_button(update, context)
 
+# Bot uygulaması
+app = ApplicationBuilder().token(TOKEN).build()
+
+# Komutlar
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("bitir", finish))
+
+# CallbackQueryHandler
 app.add_handler(CallbackQueryHandler(button_handler))
 
 # Mesaj handlerları
