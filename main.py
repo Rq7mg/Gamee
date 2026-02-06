@@ -1,3 +1,4 @@
+import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -6,8 +7,12 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# Bot token
-TOKEN = "TOKEN_BURAYA"
+# Bot tokenı Heroku Config Vars'tan alıyoruz
+TOKEN = os.getenv("TOKEN")
+
+if not TOKEN:
+    print("❌ ERROR: TOKEN not found in Config Vars. Add it in Heroku settings.")
+    exit(1)
 
 # Başlangıç menüsü
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
