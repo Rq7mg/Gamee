@@ -27,11 +27,7 @@ async def start(update, context):
 async def finish(update, context):
     user_id = update.message.from_user.id
     removed = 0
-    for game in [
-        number_game.user_games,
-        plate_game.user_games,
-        tabu_game.games,
-    ]:
+    for game in [number_game.user_games, plate_game.user_games, tabu_game.games]:
         if user_id in game:
             del game[user_id]
             removed += 1
@@ -44,17 +40,18 @@ app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("bitir", finish))
 
-# CallbackQueryHandler pattern filtreli
+# CallbackQueryHandler
 app.add_handler(CallbackQueryHandler(tabu_game.tabu_button, pattern="^tabu$"))
+app.add_handler(CallbackQueryHandler(tabu_game.tabu_buttons, pattern="^(skip_word|set_word)$"))
 app.add_handler(CallbackQueryHandler(number_game.number_button, pattern="^sayi$"))
 app.add_handler(CallbackQueryHandler(plate_game.plate_button, pattern="^plaka$"))
 app.add_handler(CallbackQueryHandler(xox_game.xox_button, pattern="^xox$"))
 app.add_handler(CallbackQueryHandler(truth_game.truth_button, pattern="^dogruluk$"))
 
-# Mesaj handlerları (tahminler)
+# Mesaj handlerları
+app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), tabu_game.tabu_guess))
 app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), number_game.number_guess))
 app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), plate_game.plate_guess))
-app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), tabu_game.tabu_guess))
 
 # Çalıştır
 app.run_polling()
