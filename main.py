@@ -1,13 +1,9 @@
 import os
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler
 
-from games.number_game import number_button, number_guess
-from games.word_game import word_button, word_guess
-from games.plate_game import plate_button, plate_guess
-from games.xox_game import xox_button
-from games.truth_game import truth_button
-
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+# Oyun modülleri
+from games import number_game, word_game, plate_game, xox_game, truth_game
 
 TOKEN = os.getenv("TOKEN")
 if not TOKEN:
@@ -23,22 +19,41 @@ async def start(update, context):
         [InlineKeyboardButton("⭕ XOX", callback_data="xox")],
         [InlineKeyboardButton("🎲 Doğruluk / Cesaret", callback_data="dogruluk")],
     ]
-    await update.message.reply_text("🎮 Oyun Menüsü", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text(
+        "🎮 Oyun Menüsü", reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# /bitir komutu
+async def finish(update, context):
+    user_id = update.message.from_user.id
+    removed = 0
+    for game in [
+        number_game.user_games,
+        word_game.user_games,
+        plate_game.user_games,
+    ]:
+        if user_id in game:
+            del game[user_id]
+            removed += 1
+    await update.message.reply_text(f"✅ Oyun(lar) sona erdirildi. {removed} oyun kapatıldı.")
 
 app = ApplicationBuilder().token(TOKEN).build()
+
+# Komutlar
 app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("bitir", finish))
 
-# Button handlerlar
-app.add_handler(CallbackQueryHandler(number_button))
-app.add_handler(CallbackQueryHandler(word_button))
-app.add_handler(CallbackQueryHandler(plate_button))
-app.add_handler(CallbackQueryHandler(xox_button))
-app.add_handler(CallbackQueryHandler(truth_button))
+# Butonlar
+app.add_handler(CallbackQueryHandler(number_game.number_button))
+app.add_handler(CallbackQueryHandler(word_game.word_button))
+app.add_handler(CallbackQueryHandler(plate_game.plate_button))
+app.add_handler(CallbackQueryHandler(xox_game.xox_button))
+app.add_handler(CallbackQueryHandler(truth_game.truth_button))
 
-# Message handlerlar
-app.add_handler(number_guess)
-app.add_handler(word_guess)
-app.add_handler(plate_guess)
+# Mesajlar
+app.add_handler(number_game.number_guess)
+app.add_handler(word_game.word_guess)
+app.add_handler(plate_game.plate_guess)
 
 # Çalıştır
 app.run_polling()
