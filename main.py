@@ -16,27 +16,19 @@ async def start(update, context):
         [InlineKeyboardButton("⭕ XOX", callback_data="xox")],
         [InlineKeyboardButton("🎲 Doğruluk / Cesaret", callback_data="dogruluk")],
     ]
-    await update.message.reply_text(
-        "🎮 Oyun Menüsü", reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    await update.message.reply_text("🎮 Oyun Menüsü", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def finish(update, context):
     chat_id = update.message.chat_id
-    # Boşluk doldurma için finish
     await fill_game.finish_game(update, context)
-    # Diğer oyunları bitir
     for game in [number_game.user_games, plate_game.user_games]:
         if chat_id in game:
             del game[chat_id]
 
-app = ApplicationBuilder().token(TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("bitir", finish))
-
 async def button_handler(update, context):
     query = update.callback_query
     await query.answer()
-    
+
     if query.data == "fill":
         await fill_game.start_fill(update, context)
     elif query.data == "sayi":
@@ -48,11 +40,11 @@ async def button_handler(update, context):
     elif query.data == "dogruluk":
         await truth_game.truth_button(update, context)
 
+app = ApplicationBuilder().token(TOKEN).build()
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("bitir", finish))
 app.add_handler(CallbackQueryHandler(button_handler))
-
-# Mesaj handlerları
 app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), fill_game.guess_fill))
 app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), number_game.number_guess))
 app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), plate_game.plate_guess))
-
 app.run_polling()
