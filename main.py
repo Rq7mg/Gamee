@@ -8,6 +8,8 @@ if not TOKEN:
     print("❌ TOKEN missing in Config Vars!")
     exit(1)
 
+ROUND_OPTIONS = [15, 30, 50, 75, 100, 150, 200, 250, 300, 500]
+
 async def start(update, context):
     keyboard = [
         [InlineKeyboardButton("🎯 Boşluk Doldurma", callback_data="fill")],
@@ -25,13 +27,36 @@ async def finish(update, context):
         if chat_id in game:
             del game[chat_id]
 
+# Round seçimi handler
+async def round_selection(update, context):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data.startswith("round_"):
+        total_rounds = int(query.data.split("_")[1])
+        await fill_game.start_fill(update, context, total_rounds=total_rounds)
+
 async def button_handler(update, context):
     query = update.callback_query
     await query.answer()
 
     if query.data == "fill":
-        # Burada istersen round ve difficulty sorulabilir
-        await fill_game.start_fill(update, context, total_rounds=15, difficulty="kolay")
+        # Round butonları göster
+        keyboard = []
+        row = []
+        for i, r in enumerate(ROUND_OPTIONS, 1):
+            row.append(InlineKeyboardButton(str(r), callback_data=f"round_{r}"))
+            if i % 3 == 0:
+                keyboard.append(row)
+                row = []
+        if row:
+            keyboard.append(row)
+
+        await query.edit_message_text("📍 Oyun kaç round olsun?", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif query.data.startswith("round_"):
+        await round_selection(update, context)
+
     elif query.data == "sayi":
         await number_game.number_button(update, context)
     elif query.data == "plaka":
