@@ -1,76 +1,49 @@
-import os
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
+from games.fill_game import fill_game, guess_fill
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackQueryHandler
-from games import number_game, plate_game, xox_game, truth_game, fill_game
 
-TOKEN = os.getenv("TOKEN")
-if not TOKEN:
-    print("❌ TOKEN missing in Config Vars!")
-    exit(1)
-
-ROUND_OPTIONS = [15, 30, 50, 75, 100, 150, 200, 250, 300, 500]
-
-async def start(update, context):
-    keyboard = [
-        [InlineKeyboardButton("🎯 Boşluk Doldurma", callback_data="fill")],
-        [InlineKeyboardButton("🎲 Sayı Tahmin", callback_data="sayi")],
-        [InlineKeyboardButton("🚗 Plaka Oyunu", callback_data="plaka")],
-        [InlineKeyboardButton("⭕ XOX", callback_data="xox")],
-        [InlineKeyboardButton("🎲 Doğruluk / Cesaret", callback_data="dogruluk")],
-    ]
-    await update.message.reply_text("🎮 Oyun Menüsü", reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def finish(update, context):
-    chat_id = update.message.chat_id
-    await fill_game.finish_game(update, context)
-    for game in [number_game.user_games, plate_game.user_games]:
-        if chat_id in game:
-            del game[chat_id]
-
-# Round seçimi handler
-async def round_selection(update, context):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data.startswith("round_"):
-        total_rounds = int(query.data.split("_")[1])
-        await fill_game.start_fill(update, context, total_rounds=total_rounds)
-
-async def button_handler(update, context):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data == "fill":
-        # Round butonları göster
-        keyboard = []
-        row = []
-        for i, r in enumerate(ROUND_OPTIONS, 1):
-            row.append(InlineKeyboardButton(str(r), callback_data=f"round_{r}"))
-            if i % 3 == 0:
-                keyboard.append(row)
-                row = []
-        if row:
-            keyboard.append(row)
-
-        await query.edit_message_text("📍 Oyun kaç round olsun?", reply_markup=InlineKeyboardMarkup(keyboard))
-
-    elif query.data.startswith("round_"):
-        await round_selection(update, context)
-
-    elif query.data == "sayi":
-        await number_game.number_button(update, context)
-    elif query.data == "plaka":
-        await plate_game.plate_button(update, context)
-    elif query.data == "xox":
-        await xox_game.xox_button(update, context)
-    elif query.data == "dogruluk":
-        await truth_game.truth_button(update, context)
+TOKEN = "YOUR_BOT_TOKEN_HERE"  # Buraya bot tokenini koy
 
 app = ApplicationBuilder().token(TOKEN).build()
+
+# Başlat komutu
+def start(update, context):
+    keyboard = [
+        [InlineKeyboardButton("10 Round", callback_data='10'),
+         InlineKeyboardButton("15 Round", callback_data='15')],
+        [InlineKeyboardButton("20 Round", callback_data='20')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text("🎯 Boşluk Doldurma oyununa hoş geldiniz! Round sayısını seçin:", reply_markup=reply_markup)
+
+# Round seçimi callback
+def button(update, context):
+    query = update.callback_query
+    rounds = int(query.data)
+    fill_game.rounds = rounds
+    query.answer()
+    query.edit_message_text(text=f"Oyun başladı! Toplam {rounds} round oynanacak.")
+    fill_game.start_round()
+
+# Kullanıcı tahminleri
+def handle_guess(update, context):
+    guess_fill(update, context)
+
+# /bitir komutu
+def end(update, context):
+    fill_game.end_game()
+    update.message.reply_text("Oyun bitirildi. Lider tablosu konsola yazdırıldı!")
+
+# Handler ekleme
 app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("bitir", finish))
-app.add_handler(CallbackQueryHandler(button_handler))
-app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), fill_game.guess_fill))
-app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), number_game.number_guess))
-app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), plate_game.plate_guess))
-app.run_polling()
+app.add_handler(CommandHandler("bitir", end))
+app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_guess))
+app.add_handler(MessageHandler(filters.StatusUpdate, lambda u, c: None))  # Gereksiz güncellemeleri yoksay
+
+# Callback handler
+app.add_handler(MessageHandler(filters.CallbackQuery, button))
+
+# Bot çalıştır
+if __name__ == "__main__":
+    print("Bot başlatıldı...")
+    app.run_polling()
