@@ -2,9 +2,9 @@ import random
 from telegram import Update
 from telegram.ext import ContextTypes
 
+# 1000 kelimelik örnek (sen buraya tamamını ekleyebilirsin)
 words = [
 "araba","telefon","bilgisayar","kalem","masa","çanta","okul","şehir","güneş","kitap",
-"ev","köpek","kedi","oyuncak","muz","elma","armut","çilek","kiraz","muzik","araba","telefon","bilgisayar","kalem","masa","çanta","okul","şehir","güneş","kitap",
 "ev","köpek","kedi","oyuncak","muz","elma","armut","çilek","kiraz","muzik",
 "resim","kalemlik","defter","sandalye","kapı","pencere","halı","lamba","televizyon","radyo",
 "bisiklet","uçak","tren","gemi","otomobil","motorsiklet","otobüs","minibüs","kamyon","deniz",
@@ -54,12 +54,10 @@ words = [
 "üniversite","fakülte","bölüm","laboratuvar","ödev","sunum","seminer","konferans","sertifika","mezun",
 "işe alım","staj","kariyer","yetenek","motivasyon","liderlik","takım","çalışma","etki","örnek",
 "pratik","teori","deneyim","bakış","bakış açısı","kavram","tanım","analiz","yorum","eleştiri",
-"tartışma","sonuç","öneri","amaç","hedef","strateji","plan","uygulama","süreç","yöntem",
-
-# ... 1000 kelime buraya eklenmeli
+"tartışma","sonuç","öneri","amaç","hedef","strateji","plan","uygulama","süreç","yöntem"
 ]
 
-games = {}  # chat_id: {"word":..., "masked":..., "letter_pool":..., "scores":{}, "active":True}
+games = {}  # chat_id: {"word":..., "masked":..., "letter_pool":..., "scores":{}, "active":True, "round":1, "total_rounds":15, "difficulty": "kolay", "puan":0}
 
 def normalize(text: str) -> str:
     mapping = str.maketrans("İIı", "iii")
@@ -101,7 +99,7 @@ def get_letter_pool(word):
     random.shuffle(letters)
     return " ".join(letters)
 
-async def start_fill(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start_fill(update: Update, context: ContextTypes.DEFAULT_TYPE, total_rounds=15, difficulty="kolay"):
     chat_id = update.message.chat_id if not hasattr(update, "callback_query") else update.callback_query.message.chat_id
     msg_func = update.message.reply_text if not hasattr(update, "callback_query") else update.callback_query.edit_message_text
 
@@ -118,10 +116,14 @@ async def start_fill(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "masked": masked,
         "letter_pool": letter_pool,
         "scores": {},
-        "active": True
+        "active": True,
+        "round": 1,
+        "total_rounds": total_rounds,
+        "difficulty": difficulty,
+        "puan": 0
     }
 
-    await msg_func(f"🎯 Boşluk Doldurma oyunu başladı!\nKelimede {len(word)} harf var.\n{masked}\n\nHarfler: {letter_pool}")
+    await msg_func(f"🎯 Boşluk Doldurma oyunu başladı!\nZorluk: {difficulty.capitalize()}\nPuan: 0\nRound: 1/{total_rounds}\n📚 {len(word)} harf: {letter_pool}\n🎲 {masked}")
 
 async def guess_fill(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
@@ -137,16 +139,29 @@ async def guess_fill(update: Update, context: ContextTypes.DEFAULT_TYPE):
         game["scores"].setdefault(user_id, {"name": user_name, "score": 0})
         game["scores"][user_id]["score"] += 1
 
-        await update.message.reply_text(f"🎉 {user_name} doğru tahmin etti!\nKelime: {game['word']}\nYeni kelime geliyor...")
+        # Puan ekle (kolay/zor)
+        if game["difficulty"] == "kolay":
+            game["puan"] += 0.6
+        else:
+            game["puan"] += 1.0
+
+        await update.message.reply_text(f"🎉 {user_name} doğru tahmin etti!\nKelime: {game['word']}")
+
+        # Yeni round
+        game["round"] += 1
+        if game["round"] > game["total_rounds"]:
+            await finish_game(update, context)
+            return
 
         new_word = random.choice(words).upper()
         game["word"] = new_word
         game["masked"] = mask_word(new_word)
         game["letter_pool"] = get_letter_pool(new_word)
 
-        await update.message.reply_text(f"Kelimede {len(new_word)} harf var.\n{game['masked']}\n\nHarfler: {game['letter_pool']}")
+        await update.message.reply_text(f"Round: {game['round']}/{game['total_rounds']}\n📚 {len(new_word)} harf: {game['letter_pool']}\n🎲 {game['masked']}\nPuan: {game['puan']:.1f}")
+
     else:
-        await update.message.reply_text(f"❌ Yanlış! Tekrar deneyin:\n{game['masked']}")
+        await update.message.reply_text(f"❌ Yanlış! Tekrar deneyin:\n🎲 {game['masked']}")
 
 async def finish_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
@@ -159,6 +174,7 @@ async def finish_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not game["scores"]:
         await update.message.reply_text("Oyun bitti, kimse puan alamadı.")
+        del games[chat_id]
         return
 
     leaderboard = sorted(game["scores"].values(), key=lambda x: x["score"], reverse=True)
