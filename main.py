@@ -2,7 +2,6 @@ import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler
 
-# Oyun modülleri
 from games import number_game, word_game, plate_game, xox_game, truth_game
 
 TOKEN = os.getenv("TOKEN")
@@ -43,12 +42,12 @@ app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("bitir", finish))
 
-# Butonlar
-app.add_handler(CallbackQueryHandler(number_game.number_button))
-app.add_handler(CallbackQueryHandler(word_game.word_button))
-app.add_handler(CallbackQueryHandler(plate_game.plate_button))
-app.add_handler(CallbackQueryHandler(xox_game.xox_button))
-app.add_handler(CallbackQueryHandler(truth_game.truth_button))
+# CallbackQueryHandler pattern filtreli
+app.add_handler(CallbackQueryHandler(number_game.number_button, pattern="^sayi$"))
+app.add_handler(CallbackQueryHandler(word_game.word_button, pattern="^kelime$"))
+app.add_handler(CallbackQueryHandler(plate_game.plate_button, pattern="^plaka$"))
+app.add_handler(CallbackQueryHandler(xox_game.xox_button, pattern="^xox$"))
+app.add_handler(CallbackQueryHandler(truth_game.truth_button, pattern="^dogruluk$"))
 
 # Mesajlar
 app.add_handler(number_game.number_guess)
