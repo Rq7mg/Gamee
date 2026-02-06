@@ -1,18 +1,24 @@
 import os
+import random
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     CallbackQueryHandler,
     ContextTypes,
+    MessageHandler,
+    filters
 )
 
-# Bot tokenı Heroku Config Vars'tan alıyoruz
+# Config Vars'dan TOKEN alıyoruz
 TOKEN = os.getenv("TOKEN")
 
 if not TOKEN:
     print("❌ ERROR: TOKEN not found in Config Vars. Add it in Heroku settings.")
     exit(1)
+
+# Kullanıcı ID -> tutulan sayı
+user_games = {}
 
 # Başlangıç menüsü
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -59,33 +65,45 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    # Placeholder mesajlar
-    responses = {
-        "kelime": "🎯 Kelime Anlatma oyunu yakında!",
-        "bosluk": "📝 Boşluk Doldurma yakında!",
-        "sarmal": "🔤 Kelime Sarmalı oyunu yakında!",
-        "math": "➗ Hızlı Matematik oyunu yakında!",
-        "sayi": "🎲 1-100 arası Sayı Tahmin oyunu!",
-        "fark": "🔎 Fark Bulmaca oyunu yakında!",
-        "bilgi": "🧠 Bilgi Oyunu yakında!",
-        "bayrak": "🏳️ Bayrak Tahmin oyunu yakında!",
-        "zincir": "🔗 Kelime Zinciri oyunu yakında!",
-        "baskent": "🏛 Başkent Tahmin oyunu yakında!",
-        "plaka": "🚗 Plaka Oyunu yakında!",
-        "xox": "⭕ XOX oyunu yakında!",
-        "dogruluk": "🎲 Doğruluk / Cesaret oyunu yakında!",
-        "hafiza": "⚡ Hafıza Şimşeği oyunu yakında!",
-        "sicak": "🌡 Sıcak Soğuk oyunu yakında!",
-        "eser": "📚 Eser-Yazar oyunu yakında!",
-    }
+    user_id = query.from_user.id
 
-    msg = responses.get(query.data, "❌ Bu oyun bulunamadı.")
-    await query.edit_message_text(msg)
+    if query.data == "sayi":
+        # Rastgele sayı tut
+        user_games[user_id] = random.randint(1, 100)
+        await query.edit_message_text(
+            "🎲 1-100 arası bir sayı tuttum! Tahminini yaz ve bakalım doğru mu?"
+        )
+    else:
+        await query.edit_message_text(f"Bu oyun henüz hazır değil: {query.data}")
 
-# Uygulama oluştur
+# Kullanıcının tahminlerini al
+async def guess_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+
+    if user_id not in user_games:
+        return  # Kullanıcı sayı tahmin oyununda değil
+
+    try:
+        guess = int(update.message.text)
+    except ValueError:
+        await update.message.reply_text("Lütfen bir sayı gir!")
+        return
+
+    target = user_games[user_id]
+
+    if guess < target:
+        await update.message.reply_text("⬆ Daha yüksek!")
+    elif guess > target:
+        await update.message.reply_text("⬇ Daha düşük!")
+    else:
+        await update.message.reply_text(f"🎉 Tebrikler! Doğru sayı {target} idi.")
+        del user_games[user_id]  # Oyun bitti
+
+# Botu oluştur
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CallbackQueryHandler(button_handler))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, guess_handler))
 
 # Botu çalıştır
 app.run_polling()
