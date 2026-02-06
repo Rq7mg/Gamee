@@ -2,7 +2,7 @@ import random
 from telegram import Update
 from telegram.ext import ContextTypes
 
-# 1000 kelimelik örnek (sen buraya tamamını ekleyebilirsin)
+# Örnek 1000 kelime (tamamını ekleyebilirsin)
 words = [
 "araba","telefon","bilgisayar","kalem","masa","çanta","okul","şehir","güneş","kitap",
 "ev","köpek","kedi","oyuncak","muz","elma","armut","çilek","kiraz","muzik",
@@ -57,10 +57,19 @@ words = [
 "tartışma","sonuç","öneri","amaç","hedef","strateji","plan","uygulama","süreç","yöntem"
 ]
 
-games = {}  # chat_id: {"word":..., "masked":..., "letter_pool":..., "scores":{}, "active":True, "round":1, "total_rounds":15, "difficulty": "kolay", "puan":0}
+games = {}  # chat_id: {"word":..., "masked":..., "letter_pool":..., "scores":{}, "active":True, "round":1, "total_rounds":15, "puan":0}
 
 def normalize(text: str) -> str:
-    mapping = str.maketrans("İIı", "iii")
+    """
+    Türkçe karakterleri normalize eder ve küçük harfe çevirir.
+    i, İ, ı → i
+    ç → c
+    ş → s
+    ö → o
+    ü → u
+    ğ → g
+    """
+    mapping = str.maketrans("İIıçşöüğ", "iii csoug")
     return text.translate(mapping).lower()
 
 def mask_word(word):
@@ -74,7 +83,6 @@ def mask_word(word):
     indices = list(range(1, length-1))
     random.shuffle(indices)
 
-    # Kaç harf açılacak
     if length == 5:
         num_to_reveal = 1
     elif length == 6:
@@ -99,7 +107,7 @@ def get_letter_pool(word):
     random.shuffle(letters)
     return " ".join(letters)
 
-async def start_fill(update: Update, context: ContextTypes.DEFAULT_TYPE, total_rounds=15, difficulty="kolay"):
+async def start_fill(update: Update, context: ContextTypes.DEFAULT_TYPE, total_rounds=15):
     chat_id = update.message.chat_id if not hasattr(update, "callback_query") else update.callback_query.message.chat_id
     msg_func = update.message.reply_text if not hasattr(update, "callback_query") else update.callback_query.edit_message_text
 
@@ -119,11 +127,10 @@ async def start_fill(update: Update, context: ContextTypes.DEFAULT_TYPE, total_r
         "active": True,
         "round": 1,
         "total_rounds": total_rounds,
-        "difficulty": difficulty,
         "puan": 0
     }
 
-    await msg_func(f"🎯 Boşluk Doldurma oyunu başladı!\nZorluk: {difficulty.capitalize()}\nPuan: 0\nRound: 1/{total_rounds}\n📚 {len(word)} harf: {letter_pool}\n🎲 {masked}")
+    await msg_func(f"🎯 Boşluk Doldurma oyunu başladı!\nZorluk: Kolay\nPuan: 0\nRound: 1/{total_rounds}\n📚 {len(word)} harf: {letter_pool}\n🎲 {masked}")
 
 async def guess_fill(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
@@ -138,12 +145,7 @@ async def guess_fill(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if normalize(text) == normalize(game["word"]):
         game["scores"].setdefault(user_id, {"name": user_name, "score": 0})
         game["scores"][user_id]["score"] += 1
-
-        # Puan ekle (kolay/zor)
-        if game["difficulty"] == "kolay":
-            game["puan"] += 0.6
-        else:
-            game["puan"] += 1.0
+        game["puan"] += 0.6  # Sabit puan
 
         await update.message.reply_text(f"🎉 {user_name} doğru tahmin etti!\nKelime: {game['word']}")
 
