@@ -1,9 +1,10 @@
 import random
 
-# Örnek kelime listesi
+# Örnek kelime listesi (4-8 harf arası, Türkçe karakterli)
 words = [
     "SİYAH","KIRMIZI","MAVİ","YEŞİL","SARI","MOR","BEYAZ","ÇANTA","ARABA","TELEFON",
-    "BİLGİSAYAR","KALEM","MASA","OKUL","ŞEHİR","DENİZ","ORMAN","BÜYÜK","KÜÇÜK","KÖPEK"
+    "BİLGİSAYAR","KALEM","MASA","OKUL","ŞEHİR","DENİZ","ORMAN","BÜYÜK","KÜÇÜK","KÖPEK",
+    "KEDİ","MÜZİK","RESİM","DEFTER","ÇORAP","AYAKKABI","PANTOLON","GÖMLEK","KAZAK","ŞAPKA"
 ]
 
 class FillGame:
@@ -21,15 +22,14 @@ class FillGame:
         letters_to_reveal = self.calculate_letters_to_reveal(self.current_word)
         self.masked_word, self.revealed_letters = self.mask_word(self.current_word, letters_to_reveal)
         print(f"🎯 Boşluk Doldurma oyunu başladı!")
-        print(f"Zorluk: Kolay")
-        print(f"Puan: {self.score}")
         print(f"Round: {self.current_round}/{self.rounds}")
         print(f"📚 {len(self.current_word)} harf: {' '.join(self.revealed_letters)}")
         print(f"🎲 {self.masked_word}")
 
     def mask_word(self, word: str, letters_to_reveal: int):
         """
-        Kelimeyi maskeler ve açılan harfleri + olarak gösterir
+        Kelimeyi maskeler. Açılan harfler + ile gösterilir, maskelenmişler -
+        Harfler ayrık ve belirgin.
         """
         word_letters = list(word)
         masked = ["-" for _ in word_letters]
@@ -37,7 +37,7 @@ class FillGame:
         random.shuffle(indices)
         reveal_indices = indices[:letters_to_reveal]
         for i in reveal_indices:
-            masked[i] = "+"  # açılan harflerin yerine +
+            masked[i] = "+"  # açılan harfler
         return " ".join(masked), [word_letters[i] for i in reveal_indices]
 
     def calculate_letters_to_reveal(self, word: str):
@@ -46,7 +46,7 @@ class FillGame:
             return 1
         elif l == 6:
             return random.choice([1,2])
-        else:
+        else:  # 7-8 harf
             return random.choice([2,3])
 
     def guess(self, user: str, guess_word: str):
@@ -68,6 +68,9 @@ class FillGame:
 
     @staticmethod
     def normalize(word: str) -> str:
+        """
+        Kelimeyi normalize eder: Türkçe karakterler ASCII karşılıklarına çevrilir
+        """
         mapping = str.maketrans(
             "İIıiÇçŞşÖöÜüĞğ",
             "IIIiccssoougg"
