@@ -1,6 +1,6 @@
 import random
 
-# Örnek kelime listesi, 4-8 harf arası kelimeler
+# Örnek kelime listesi, 4-8 harf arası, tamamen Türkçe karakterli
 words = [
 "araba","telefon","bilgisayar","kalem","masa","çanta","okul","şehir","güneş","kitap",
 "ev","köpek","kedi","oyuncak","muz","elma","armut","çilek","kiraz","muzik",
@@ -177,13 +177,16 @@ class FillGame:
         print(f"🎲 {self.masked_word}")
 
     def mask_word(self, word: str, letters_to_reveal: int):
+        """
+        Kelimeyi maskeler ve rastgele harfleri açar
+        """
         word_letters = list(word)
         masked = ["-" for _ in word_letters]
         indices = list(range(len(word_letters)))
         random.shuffle(indices)
         reveal_indices = indices[:letters_to_reveal]
         for i in reveal_indices:
-            masked[i] = word_letters[i]
+            masked[i] = word_letters[i]  # Türkçe karakterler korunuyor
         return "-".join(masked), [word_letters[i] for i in reveal_indices]
 
     def calculate_letters_to_reveal(self, word: str):
@@ -196,10 +199,16 @@ class FillGame:
             return random.choice([2,3])
 
     def guess(self, user: str, guess_word: str):
+        """
+        Kullanıcı tahminini kontrol eder ve doğruysa puan verir
+        """
         if self.normalize(guess_word) == self.normalize(self.current_word):
             self.score[user] = self.score.get(user, 0) + 1
             print(f"{user} doğru tahmin etti! Puan: {self.score[user]}")
-            self.start_round()  # Yeni kelimeye geç
+            if self.current_round < self.rounds:
+                self.start_round()
+            else:
+                self.end_game()
         else:
             print(f"{user} yanlış tahmin: {guess_word}")
 
@@ -211,18 +220,22 @@ class FillGame:
 
     @staticmethod
     def normalize(word: str) -> str:
+        """
+        Kelimeyi normalize eder: Türkçe karakterler ASCII karşılıklarına çevrilir
+        """
         mapping = str.maketrans(
-            "İIıçıŞşÖöÜüĞğ",
-            "IIicssOouGg"
+            "İIıiÇçŞşÖöÜüĞğ",
+            "IIIiccssoougg"
         )
         return word.translate(mapping).lower()
 
 
 # Örnek kullanım
-game = FillGame(rounds=5)
-game.start_round()
+if __name__ == "__main__":
+    game = FillGame(rounds=5)
+    game.start_round()
 
-# Tahmin simülasyonu
-game.guess("Ali", "SİYAH")
-game.guess("Ayşe", "MAVİ")
-game.end_game()
+    # Tahmin simülasyonu
+    game.guess("Ali", "SİYAH")
+    game.guess("Ayşe", "MAVİ")
+    game.end_game()
