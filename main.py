@@ -10,9 +10,8 @@ from telegram.ext import (
     filters
 )
 
-# Config Vars'dan TOKEN alıyoruz
+# Bot token Heroku Config Vars'dan
 TOKEN = os.getenv("TOKEN")
-
 if not TOKEN:
     print("❌ ERROR: TOKEN not found in Config Vars. Add it in Heroku settings.")
     exit(1)
@@ -76,19 +75,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await query.edit_message_text(f"Bu oyun henüz hazır değil: {query.data}")
 
-# Kullanıcının tahminlerini al
+# Kullanıcının tahminlerini alacak handler
 async def guess_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
 
+    # Kullanıcı Sayı Tahmin oyununda mı?
     if user_id not in user_games:
-        return  # Kullanıcı sayı tahmin oyununda değil
+        return
 
-    try:
-        guess = int(update.message.text)
-    except ValueError:
+    text = update.message.text
+
+    # Sadece sayıysa işle
+    if not text.isdigit():
         await update.message.reply_text("Lütfen bir sayı gir!")
         return
 
+    guess = int(text)
     target = user_games[user_id]
 
     if guess < target:
@@ -103,7 +105,7 @@ async def guess_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CallbackQueryHandler(button_handler))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, guess_handler))
+app.add_handler(MessageHandler(filters.TEXT, guess_handler))
 
 # Botu çalıştır
 app.run_polling()
