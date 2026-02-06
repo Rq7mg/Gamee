@@ -2,12 +2,61 @@ import random
 from telegram import Update
 from telegram.ext import ContextTypes
 
-# 1000 kelimelik örnek liste (gerekirse daha da genişlet)
 words = [
 "araba","telefon","bilgisayar","kalem","masa","çanta","okul","şehir","güneş","kitap",
+"ev","köpek","kedi","oyuncak","muz","elma","armut","çilek","kiraz","muzik","araba","telefon","bilgisayar","kalem","masa","çanta","okul","şehir","güneş","kitap",
 "ev","köpek","kedi","oyuncak","muz","elma","armut","çilek","kiraz","muzik",
 "resim","kalemlik","defter","sandalye","kapı","pencere","halı","lamba","televizyon","radyo",
-# ... 1000 kelimeyi buraya ekle
+"bisiklet","uçak","tren","gemi","otomobil","motorsiklet","otobüs","minibüs","kamyon","deniz",
+"göl","nehir","şelale","dağ","ova","orman","bahçe","park","meydan","mutfak",
+"banyo","oturma","yatak","koltuk","dolap","kitaplık","raf","ayna","kapak","çorap",
+"ayakkabı","pantolon","gömlek","kazak","şapka","atkı","eldiven","kemer","mont","ceket",
+"pantolon","etek","eldiven","çorap","terlik","bot","sneaker","tshirt","şort","eşofman",
+"kazak","mont","palto","trençkot","gözlük","kolye","bilezik","küpe","yüzük","saç",
+"toka","şapka","bere","atkı","çanta","cüzdan","kemer","anahtar","telefon","kulaklık",
+"kamera","şarj","kablosuz","hoparlör","mikrofon","klavye","fare","ekran","monitor","laptop",
+"tablet","kamera","projeksiyon","usb","fotoğraf","video","oyun","yazılım","donanım","sunucu",
+"veri","internet","modem","router","uygulama","sistem","ağ","bilgi","teknoloji","robot",
+"uzay","yıldız","gezegen","ay","güneş","evren","meteor","asteroit","astronomi","fizik",
+"kimya","biyoloji","matematik","tarih","coğrafya","edebiyat","şiir","roman","hikaye","öykü",
+"müzik","şarkı","melodi","ritim","nota","enstrüman","piyano","gitar","davul","flüt",
+"klarnet","saksafon","orkestra","konser","festival","tiyatro","film","sinema","dizi","oyuncu",
+"yönetmen","senaryo","kamera","set","kostüm","makyaj","perde","sahne","ışık","ses",
+"zaman","saat","dakika","saniye","takvim","tarih","gece","gündüz","hafta","ay",
+"yıl","mevsim","ilkbahar","yaz","sonbahar","kış","hava","yağmur","kar","rüzgar",
+"fırtına","sis","gökkuşağı","bulut","şimşek","gök","deniz","kumsal","plaj","dalga",
+"kum","taş","kayalık","dağ","tepe","vadi","orman","ağaç","çiçek","tohum",
+"meyve","sebze","elma","armut","üzüm","karpuz","şeftali","kiraz","çilek","muz",
+"patates","soğan","sarımsak","biber","domates","salatalık","havuç","marul","ıspanak","kabak",
+"patlıcan","brokoli","karnabahar","lahana","mantar","bezelye","bakla","fasulye","nohut","mercimek",
+"pirinç","bulgur","makarna","ekmek","tatlı","dondurma","çikolata","bisküvi","kurabiye","pasta",
+"kek","şeker","bal","reçel","peynir","yoğurt","süt","yumurta","et","tavuk",
+"balık","karides","kalamar","midye","pirzola","köfte","sosis","hamburger","pizza","sandviç",
+"salata","çorba","pilav","kebap","döner","lahmacun","mantı","pilaki","börek","poğaça",
+"kurabiye","lokum","helva","meyveli","çilekli","muzlu","çikolatalı","vanilyalı","fındıklı","bademli",
+"cevizli","kuru","yağlı","acı","tatlı","ekşi","tuzlu","bitter","sütlü","karamel",
+"kahve","çay","meyve suyu","limonata","su","gazoz","şerbet","kokteyl","smoothie","şarap",
+"bira","alkol","meşrubat","içecek","atıştırmalık","cüretkar","heyecan","macera","hikâye","destan",
+"şiirsel","melodi","senfoni","orkestra","ritmik","dans","performans","sahne","kostüm","dekor",
+"oyunculuk","sanat","kamera","çekim","montaj","senaryo","senarist","yönetmen","eleştirmen","festivali",
+"sergi","müze","tarih","arkeoloji","çağ","antik","modern","klasik","geleneksel","çağdaş",
+"felsefe","psikoloji","sosyoloji","ekonomi","politik","hukuk","yasama","yürütme","yargı","toplum",
+"insan","birey","grup","aile","arkadaş","komşu","şirket","işletme","şirketçi","girişim",
+"yatırım","bankacılık","para","bütçe","faiz","kredi","maaş","çalışma","iş","işçi",
+"patron","yönetici","toplantı","sunum","rapor","proje","hedef","strateji","analiz","veri",
+"istatistik","sonuç","tahmin","deney","laboratuvar","cihaz","tez","makale","yayın","araştırma",
+"inovasyon","teknik","mühendislik","tasarım","yenilik","ürün","pazar","müşteri","rekabet","marka",
+"logo","web","site","uygulama","mobil","oyun","tasarımcı","grafik","fotoğraf","video",
+"kamera","mikrofon","hoparlör","aygıt","cihaz","donanım","yazılım","kod","program","değişken",
+"fonksiyon","döngü","sözlük","liste","kütüphane","modül","paket","sunucu","istemci","veritabanı",
+"sql","noSQL","dosya","klasör","sürücü","yerel","uzaktan","dosya sistemi","arayüz","buton",
+"form","alan","geri besleme","öğrenme","eğitim","öğrenci","öğretmen","sınav","ders","müfredat",
+"üniversite","fakülte","bölüm","laboratuvar","ödev","sunum","seminer","konferans","sertifika","mezun",
+"işe alım","staj","kariyer","yetenek","motivasyon","liderlik","takım","çalışma","etki","örnek",
+"pratik","teori","deneyim","bakış","bakış açısı","kavram","tanım","analiz","yorum","eleştiri",
+"tartışma","sonuç","öneri","amaç","hedef","strateji","plan","uygulama","süreç","yöntem",
+
+# ... 1000 kelime buraya eklenmeli
 ]
 
 games = {}  # chat_id: {"word":..., "masked":..., "letter_pool":..., "scores":{}, "active":True}
@@ -17,26 +66,34 @@ def normalize(text: str) -> str:
     return text.translate(mapping).lower()
 
 def mask_word(word):
-    """
-    İlk ve son harf açık, ortadaki 1-3 harf rastgele açık.
-    Geri kalan '_' ile maskelenir.
-    """
     word = word.upper()
-    if len(word) <= 2:
-        return word[0] + "_"*(len(word)-1)
+    length = len(word)
+    
+    if length <= 2:
+        return word[0] + "-"*(length-1)
 
-    word_chars = list(word)
-    indices = list(range(1, len(word)-1))
+    chars = list(word)
+    indices = list(range(1, length-1))
     random.shuffle(indices)
-    num_to_reveal = min(3, len(indices))
+
+    # Kaç harf açılacak
+    if length == 5:
+        num_to_reveal = 1
+    elif length == 6:
+        num_to_reveal = random.choice([1,2])
+    elif length == 7:
+        num_to_reveal = random.choice([2,3])
+    else:
+        num_to_reveal = max(1, length // 3)
+
     to_reveal = indices[:num_to_reveal]
 
     masked = ""
-    for i, c in enumerate(word_chars):
-        if i == 0 or i == len(word)-1 or i in to_reveal:
+    for i, c in enumerate(chars):
+        if i == 0 or i == length-1 or i in to_reveal:
             masked += c
         else:
-            masked += "_"
+            masked += "-"
     return masked
 
 def get_letter_pool(word):
