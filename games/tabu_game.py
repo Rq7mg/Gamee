@@ -12,6 +12,10 @@ games = {}  # {chat_id: {"word": w, "anlatıcı_id": uid, "attempts":0, "active"
 def get_new_word():
     return random.choice(words)
 
+def normalize(text: str) -> str:
+    mapping = str.maketrans("İIı", "iii")
+    return text.translate(mapping).lower()
+
 async def tabu_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -32,18 +36,17 @@ async def tabu_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     keyboard = [
-        [
-            InlineKeyboardButton("Kelimeyi Geç", callback_data="skip_word"),
-            InlineKeyboardButton("Kelime Yaz", callback_data="set_word")
-        ]
+        [InlineKeyboardButton("Kelimeyi Geç", callback_data="skip_word"),
+         InlineKeyboardButton("Kelime Yaz", callback_data="set_word")]
     ]
 
     await query.edit_message_text(
-        f"🎯 *Tabu / Kelime Anlatma Başladı!*\n"
-        f"Anlatıcı: *{username}*\n"
+        f"🎯 Tabu / Kelime Anlatma başladı!\n"
+        f"Anlatıcı: {username}\n"
+        f"Kelime: ||{word}|| 👀\n"
         f"Tahminler chat’te yazılsın.",
         reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
+        parse_mode="MarkdownV2"
     )
 
 async def tabu_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -56,6 +59,7 @@ async def tabu_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     game = games[chat_id]
+
     if user_id != game["anlatıcı_id"]:
         await query.answer("⚠️ Sadece anlatıcı bunu kullanabilir!", show_alert=True)
         return
@@ -65,22 +69,22 @@ async def tabu_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         game["word"] = new_word
         game["attempts"] = 0
         await query.edit_message_text(
-            f"🔄 Kelime değiştirildi! Anlatıcı: *{update.effective_user.first_name}*\n"
-            "Tahminler chat’te yazılsın.",
+            f"🔄 Kelime değiştirildi! Anlatıcı: {update.effective_user.first_name}\n"
+            f"Kelime: ||{new_word}|| 👀\nTahminler chat’te yazılsın.",
             reply_markup=query.message.reply_markup,
-            parse_mode="Markdown"
+            parse_mode="MarkdownV2"
         )
 
     elif query.data == "set_word":
         await query.edit_message_text(
-            "✏️ Yeni kelimeyi yazın:",
+            "✏️ Yeni kelimeyi yazın, bot bunu kaydedecek."
         )
         context.user_data["awaiting_word"] = True
 
 async def tabu_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     user_id = update.message.from_user.id
-    text = update.message.text.strip().lower()
+    text = update.message.text.strip()
 
     if chat_id not in games or not games[chat_id]["active"]:
         return
@@ -92,8 +96,9 @@ async def tabu_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
         game["attempts"] = 0
         context.user_data["awaiting_word"] = False
         await update.message.reply_text(
-            f"✅ Yeni kelime set edildi! Anlatıcı: *{update.effective_user.first_name}*\nTahminler chat’te yazılsın.",
-            parse_mode="Markdown"
+            f"✅ Yeni kelime set edildi! Anlatıcı: {update.effective_user.first_name}\n"
+            f"Kelime: ||{text}|| 👀\nTahminler chat’te yazılsın.",
+            parse_mode="MarkdownV2"
         )
         return
 
@@ -102,11 +107,11 @@ async def tabu_guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     game["attempts"] += 1
 
-    if text == game["word"].lower():
+    if normalize(text) == normalize(game["word"]):
         await update.message.reply_text(
             f"🎉 Tebrikler {update.message.from_user.first_name}! "
-            f"Doğru kelime: *{game['word']}* "
+            f"Doğru kelime: ||{game['word']}|| "
             f"({game['attempts']} tahmin).",
-            parse_mode="Markdown"
+            parse_mode="MarkdownV2"
         )
         game["active"] = False
