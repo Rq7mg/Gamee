@@ -30,7 +30,8 @@ async def button_handler(update, context):
     await query.answer()
 
     if query.data == "fill":
-        await fill_game.start_fill(update, context)
+        # Burada istersen round ve difficulty sorulabilir
+        await fill_game.start_fill(update, context, total_rounds=15, difficulty="kolay")
     elif query.data == "sayi":
         await number_game.number_button(update, context)
     elif query.data == "plaka":
