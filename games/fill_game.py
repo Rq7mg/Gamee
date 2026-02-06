@@ -2,27 +2,26 @@ import random
 from telegram import Update
 from telegram.ext import ContextTypes
 
-# 1000 Türkçe kelime listesi (örnek olarak 1000 kelime olacak şekilde hazırlanmıştır)
+# 1000 Türkçe kelime listesi (örnek)
 words = [
     "araba","telefon","bilgisayar","kalem","masa","çanta","okul","şehir","güneş","kitap",
     "ev","köpek","kedi","oyuncak","muz","elma","armut","çilek","kiraz","muzik",
     "resim","kalemlik","defter","sandalye","kapı","pencere","halı","lamba","televizyon","radyo",
     "bisiklet","uçak","tren","gemi","otomobil","motorsiklet","otobüs","minibüs","kamyon","deniz",
-    "göl","nehir","şelale","dağ","ova","orman","bahçe","park","meydan","mutfak","banyo","oturma",
-    "yatak","koltuk","dolap","kitaplık","raf","ayna","kapak","çorap","ayakkabı","pantolon",
-    "gömlek","kazak","şapka","atkı","eldiven","kemer","mont","portakal","mandalina","karpuz",
-    "kavun","vişne","üzüm","kayısı","erik","armut","elma","muz","çikolata","bisküvi",
-    # ... devam ederek toplam 1000 kelime olacak şekilde dolduruldu
+    "göl","nehir","şelale","dağ","ova","orman","bahçe","park","meydan",
+    # ... toplam 1000 kelime olacak şekilde doldurulacak
 ]
 
 games = {}  # {chat_id: {"word": w, "masked": m, "attempts":0, "active":True}}
 
 def mask_word(word):
-    if len(word) <= 2:
-        return word[0] + "*" * (len(word)-1)
-    return word[0] + "*" * (len(word)-2) + word[-1]
+    """İlk harfi açık, geri kalan harfler gizli"""
+    if len(word) <= 1:
+        return "*"  # Tek harfli kelimeyse tamamen gizle
+    return word[0] + "*" * (len(word)-1)
 
 def normalize(text: str) -> str:
+    """Büyük/küçük harf ve I/İ farkını yok say"""
     mapping = str.maketrans("İIı", "iii")
     return text.translate(mapping).lower()
 
@@ -61,9 +60,9 @@ async def guess_fill(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if normalize(text) == normalize(game["word"]):
         await update.message.reply_text(
-            f"🎉 Tebrikler {update.message.from_user.first_name}! "
-            f"Doğru kelime: {game['word']} ({game['attempts']} tahmin)"
+            f"🎉 {update.message.from_user.first_name} doğru tahmin etti! "
+            f"Kelime: {game['word']}"
         )
-        game["active"] = False
+        # Oyun bitmez, herkes tahmin edebilir
     else:
         await update.message.reply_text(f"❌ Yanlış! Tekrar deneyin:\n{game['masked']}")
