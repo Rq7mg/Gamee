@@ -115,6 +115,7 @@ def button(update, context):
         context.bot.send_message(g["narrator"], "Yeni kelimeyi yaz:")
         q.answer("DM gönderildi")
 
+# ---------- TAHMİN ----------
 def guess(update, context):
     chat_id = update.effective_chat.id
     g = games.get(chat_id)
@@ -124,23 +125,25 @@ def guess(update, context):
     text = update.message.text.strip()
     g["last"] = time.time()
 
-    # DM’den yeni kelime ayarı
+    # DM’den yeni kelime ayarlayan anlatıcı
     if update.message.chat.type == "private" and update.message.from_user.id == g["narrator"]:
         g["word"] = text
         g["hint"] = "manuel"
         send_game(context, chat_id)
         return
 
-    # Grup tahmini
+    # Grup tahmini → artık DM’den gelen yeni kelimeyi de kontrol ediyor
     if text.lower() == g["word"].lower():
         user = update.message.from_user
         g["scores"][user.first_name] = g["scores"].get(user.first_name, 0) + 1
 
         update.message.reply_text(f"🎉 {user.first_name} doğru bildi!")
 
+        # Text modunda kazanan artık anlatıcı olur
         if g["mode"] == "text":
             g["narrator"] = user.id
 
+        # Yeni kelime seç ve oyunu güncelle
         g["word"], g["hint"] = pick_word()
         send_game(context, chat_id)
 
