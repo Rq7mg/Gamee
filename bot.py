@@ -192,6 +192,27 @@ def wordcount(update, context):
         return
     update.message.reply_text(f"Toplam kelime: {len(WORDS)}")
 
+# ---------- STOP KOMUTU ----------
+def stop(update, context):
+    chat_id = update.effective_chat.id
+    user_id = update.message.from_user.id
+
+    # Owner her zaman durdurabilir
+    if user_id != OWNER_ID:
+        admins = context.bot.get_chat_administrators(chat_id)
+        admin_ids = [a.user.id for a in admins]
+        if user_id not in admin_ids:
+            update.message.reply_text("⛔ Sadece adminler durdurabilir.")
+            return
+
+    game = games.get(chat_id)
+    if not game or not game["active"]:
+        update.message.reply_text("❗ Bu grupta aktif oyun yok.")
+        return
+
+    game["active"] = False
+    update.message.reply_text("🛑 Oyun durduruldu.")
+
 # ---------- TIMER ----------
 def timer_check(context):
     now = time.time()
@@ -212,6 +233,7 @@ def main():
     dp.add_handler(CommandHandler("addword", addword))
     dp.add_handler(CommandHandler("delword", delword))
     dp.add_handler(CommandHandler("wordcount", wordcount))
+    dp.add_handler(CommandHandler("stop", stop))
 
     dp.add_handler(CallbackQueryHandler(mode_select, pattern="voice|text"))
     dp.add_handler(CallbackQueryHandler(button, pattern="look|next|write"))
