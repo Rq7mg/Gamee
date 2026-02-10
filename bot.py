@@ -78,13 +78,17 @@ def send_game(context, chat_id):
     mode_text = "Sesli" if g["mode"] == "voice" else "Yazılı"
     narrator = context.bot.get_chat_member(chat_id, g["narrator"]).user.first_name
 
+    BOT_USERNAME = context.bot.username  # Bot kullanıcı adı
+
     keyboard = [[
         InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look"),
         InlineKeyboardButton("➡️ Kelimeyi Geç", callback_data="next"),
-        InlineKeyboardButton("✍️ Kelime Yaz", callback_data="write")
+        InlineKeyboardButton(
+            "✍️ Kelime Yaz",
+            url=f"https://t.me/{BOT_USERNAME}?start=write"
+        )
     ]]
 
-    # Grup mesajı: sadece mod ve anlatıcı
     context.bot.send_message(
         chat_id,
         f"Oyun başladı!\nMod: {mode_text}\nAnlatıcı: {narrator}",
@@ -110,10 +114,6 @@ def button(update, context):
         g["word"], g["hint"] = pick_word()
         send_game(context, chat_id)
         q.answer("Yeni kelime")
-
-    elif q.data == "write":
-        context.bot.send_message(g["narrator"], "Yeni kelimeyi yaz:")
-        q.answer("DM gönderildi")
 
 # ---------- TAHMİN ----------
 def guess(update, context):
@@ -254,7 +254,7 @@ def main():
 
     # Butonlar
     dp.add_handler(CallbackQueryHandler(mode_select, pattern="voice|text"))
-    dp.add_handler(CallbackQueryHandler(button, pattern="look|next|write"))
+    dp.add_handler(CallbackQueryHandler(button, pattern="look|next"))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, guess))
 
     # Timer
