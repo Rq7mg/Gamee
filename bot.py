@@ -5,7 +5,6 @@ import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import *
 
-# Heroku ENV
 TOKEN = os.environ.get("BOT_TOKEN")
 
 # Oyun değişkenleri
@@ -47,8 +46,8 @@ def start(update, context):
         "/stop → Oyunu durdurur (sadece admin)\n\n"
         "Oyun özellikleri:\n"
         "- Sesli ve yazılı mod\n"
-        "- 👀 Kelimeye Bak → popup, kelime ve ipucu\n"
-        "- ➡️ Kelimeyi Geç → yeni kelime popup ile anlatıcıya\n"
+        "- 👀 Kelimeye Bak → popup (grupta, sadece anlatıcı görür)\n"
+        "- ➡️ Kelimeyi Geç → popup (grupta, sadece anlatıcı görür)\n"
         "- ✍️ Kelime Yaz → özel mesaj ile anlatıcı yeni kelime belirler\n"
         "- Doğru tahmin +1 puan, lider tablosu\n"
         "- 5 dk işlem yoksa oyun otomatik biter"
@@ -108,13 +107,13 @@ def button(update, context):
         return
 
     if query.data == "look":
-        # Popup göster
+        # ✅ Grup içinde popup göster
         query.answer(
             text=f"Kelime: {current_word}\nİpucu: {current_hint}",
             show_alert=True
         )
     elif query.data == "next":
-        # Yeni kelime popup
+        # ✅ Grup içinde popup göster
         current_word, current_hint = pick_word()
         last_activity = time.time()
         query.answer(
@@ -122,7 +121,7 @@ def button(update, context):
             show_alert=True
         )
     elif query.data == "write":
-        # Özel mesaj ile kelime yazdır
+        # ✅ DM ile kelime yazdır
         last_activity = time.time()
         try:
             context.bot.send_message(
@@ -142,7 +141,7 @@ def guess(update, context):
     text = update.message.text.strip()
     last_activity = time.time()
 
-    # Eğer özel mesajda yeni kelime yazıldı
+    # DM'den yeni kelime
     if update.message.chat.type == "private" and update.message.from_user.id == narrator_id:
         current_word = text
         current_hint = "Kullanıcı tarafından girildi"
@@ -158,15 +157,14 @@ def guess(update, context):
 
         update.message.reply_text(f"🎉 {user.first_name} doğru bildi! +1 puan")
 
-        # Yazılı mod → anlatıcı değişir
         if mode == "text":
             narrator_id = user.id
             context.bot.send_message(narrator_id, f"Siz artık anlatıcısınız! Kelimeyi anlatın.")
             current_word, current_hint = pick_word()
             context.bot.send_message(narrator_id, f"Yeni kelime:\n{current_word}\nİpucu: {current_hint}")
         else:
-            # Sesli mod → yeni kelime popup
             current_word, current_hint = pick_word()
+            # Popup yerine DM yerine anlatıcıya tekrar mesaj
             context.bot.send_message(narrator_id, f"Yeni kelime:\n{current_word}\nİpucu: {current_hint}")
 
 # Stop
@@ -192,7 +190,7 @@ def end_game(context):
         ranking += f"{name}: {score} puan\n"
     context.bot.send_message(group_chat_id, ranking)
 
-# 5 dk timer
+# 5 dk inactivity
 def timer_check(context):
     global game_active
     if game_active and time.time() - last_activity > 300:
