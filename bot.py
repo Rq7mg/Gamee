@@ -24,8 +24,7 @@ group_chat_id = None
 last_activity = time.time()
 scores = {}  # Her oyun sıfırdan başlar
 sudo_users = set([OWNER_ID])
-duyuru_count = 0  # kaç gruba ulaştı
-groups_data = {}  # Her grup için veri saklama
+groups_data = {}
 
 # Kelime seç
 def pick_word():
@@ -165,7 +164,7 @@ def send_game_message(context):
         [
             InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look"),
             InlineKeyboardButton("➡️ Kelimeyi Geç", callback_data="next"),
-            InlineKeyboardButton("✍️ Kelime Yaz", callback_data="write")
+            InlineKeyboardButton("✍️ Kelime Yaz", url=f"tg://user?id={narrator_id}")  # Burada DM linki eklendi
         ]
     ]
     context.bot.send_message(
@@ -188,9 +187,6 @@ def button(update, context):
     elif query.data == "next":
         current_word, current_hint = pick_word()
         query.answer("Yeni kelime atandı! Kelimeye Bak kısmında (;", show_alert=True)
-    elif query.data == "write":
-        context.bot.send_message(narrator_id, "✍️ Yeni kelimeyi yazın .")
-        query.answer("Özel mesaj açıldı.", show_alert=True)
 
 # Tahmin kontrolü
 def guess(update, context):
