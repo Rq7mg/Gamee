@@ -5,7 +5,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import *
 
 import os
-TOKEN = os.environ.get("BOT_TOKEN")"
+TOKEN = os.environ.get("BOT_TOKEN")
 
 game_active = False
 mode = None
