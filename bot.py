@@ -4,18 +4,21 @@ import time
 import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
+from pymongo import MongoClient
 
 TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = int(os.environ.get("OWNER_ID"))
 
 SUDO_FILE = "sudo.json"
 
+# MongoDB bağlantısı
+MONGO_URI = os.environ.get("MONGO_URI")
+mongo_client = MongoClient(MONGO_URI)
+db = mongo_client["tabu_bot"]
+words_col = db["words"]
+
 # Her grup için ayrı oyun state ve skorlar
 games = {}  # chat_id: {active, mode, narrator, word, hint, last, scores}
-
-# Kelimeler
-with open("words.json", encoding="utf-8") as f:
-    WORDS = json.load(f)
 
 # ---------- SUDO ----------
 def load_sudo():
@@ -34,16 +37,19 @@ def is_authorized(uid):
 
 # ---------- KELİME SEÇ ----------
 def pick_word():
-    w = random.choice(WORDS)
-    return w["word"], w["hint"]
+    count = words_col.count_documents({})
+    if count == 0:
+        return "kelime_yok", "veritabanı boş"
+    r = random.randint(0, count - 1)
+    word = words_col.find().skip(r).limit(1)[0]
+    return word["word"], word["hint"]
 
 # ---------- KOMUTLAR ----------
 def start(update, context):
-    update.message.reply_text("Anlatacgın kelimeyi yaz canımm (:")
+    update.message.reply_text("🎮 Kelime Oyunu Botu\n/game ile başla")
 
 def game(update, context):
     chat_id = update.effective_chat.id
-    # Oyun başlarken skorlar sıfırlanıyor
     games[chat_id] = {
         "active": False,
         "mode": None,
@@ -78,7 +84,7 @@ def send_game(context, chat_id):
     mode_text = "Sesli" if g["mode"] == "voice" else "Yazılı"
     narrator = context.bot.get_chat_member(chat_id, g["narrator"]).user.first_name
 
-    BOT_USERNAME = context.bot.username  # Bot kullanıcı adı
+    BOT_USERNAME = context.bot.username
 
     keyboard = [[
         InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look"),
@@ -107,7 +113,6 @@ def button(update, context):
     g["last"] = time.time()
 
     if q.data == "look":
-        # Pop-up: kelime + ipucu
         q.answer(f"Kelime: {g['word']}\nİpucu: {g['hint']}", show_alert=True)
 
     elif q.data == "next":
@@ -119,7 +124,6 @@ def button(update, context):
 def guess(update, context):
     text = update.message.text.strip()
 
-    # DM’den yeni kelime atan anlatıcı
     if update.message.chat.type == "private":
         for chat_id, g in games.items():
             if g["active"] and update.message.from_user.id == g["narrator"]:
@@ -129,7 +133,6 @@ def guess(update, context):
                 send_game(context, chat_id)
         return
 
-    # Grup tahmini
     chat_id = update.effective_chat.id
     g = games.get(chat_id)
     if not g or not g["active"]:
@@ -167,28 +170,41 @@ def sudolist(update, context):
 
 def addword(update, context):
     if not is_authorized(update.message.from_user.id):
+        update.message.reply_text("⛔ Yetkin yok")
         return
-    text = update.message.text.replace("/addword", "").strip()
-    word, hint = map(str.strip, text.split("-", 1))
-    WORDS.append({"word": word, "hint": hint})
-    with open("words.json", "w", encoding="utf-8") as f:
-        json.dump(WORDS, f, ensure_ascii=False, indent=2)
-    update.message.reply_text("Kelime eklendi")
+
+    try:
+        text = update.message.text.replace("/addword", "").strip()
+        word, hint = map(str.strip, text.split("-", 1))
+    except:
+        update.message.reply_text("Kullanım: /addword kelime - ipucu")
+        return
+
+    if words_col.find_one({"word": word.lower()}):
+        update.message.reply_text("⚠️ Bu kelime zaten var")
+        return
+
+    words_col.insert_one({"word": word, "hint": hint})
+    update.message.reply_text("✅ Kelime MongoDB’ye eklendi")
 
 def delword(update, context):
     if not is_authorized(update.message.from_user.id):
         return
-    target = " ".join(context.args).lower()
-    global WORDS
-    WORDS = [w for w in WORDS if w["word"].lower() != target]
-    with open("words.json", "w", encoding="utf-8") as f:
-        json.dump(WORDS, f, ensure_ascii=False, indent=2)
-    update.message.reply_text("Silindi")
+
+    word = " ".join(context.args).strip().lower()
+    result = words_col.delete_one({"word": word})
+
+    if result.deleted_count:
+        update.message.reply_text("🗑 Kelime silindi")
+    else:
+        update.message.reply_text("❌ Kelime bulunamadı")
 
 def wordcount(update, context):
     if not is_authorized(update.message.from_user.id):
         return
-    update.message.reply_text(f"Toplam kelime: {len(WORDS)}")
+
+    count = words_col.count_documents({})
+    update.message.reply_text(f"📊 Toplam kelime: {count}")
 
 # ---------- STOP KOMUTU ----------
 def stop(update, context):
@@ -209,7 +225,6 @@ def stop(update, context):
 
     g["active"] = False
 
-    # Grup bazlı lider tablosu
     ranking = "🏆 Lider Tablosu\n\n"
     sorted_scores = sorted(g["scores"].items(), key=lambda x: x[1], reverse=True)
     if sorted_scores:
@@ -242,7 +257,6 @@ def main():
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
 
-    # Komutlar
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("game", game))
     dp.add_handler(CommandHandler("addsudo", addsudo))
@@ -252,12 +266,10 @@ def main():
     dp.add_handler(CommandHandler("wordcount", wordcount))
     dp.add_handler(CommandHandler("stop", stop))
 
-    # Butonlar
     dp.add_handler(CallbackQueryHandler(mode_select, pattern="voice|text"))
     dp.add_handler(CallbackQueryHandler(button, pattern="look|next"))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, guess))
 
-    # Timer
     updater.job_queue.run_repeating(timer_check, 10)
 
     updater.start_polling()
