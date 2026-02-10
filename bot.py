@@ -160,11 +160,12 @@ def mode_select(update, context):
 # Oyun mesajı
 def send_game_message(context):
     global group_chat_id, narrator_id, current_word, current_hint
+    BOT_ID = context.bot.id  # Bot kendi DM linki
     keyboard = [
         [
             InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look"),
             InlineKeyboardButton("➡️ Kelimeyi Geç", callback_data="next"),
-            InlineKeyboardButton("✍️ Kelime Yaz", url=f"tg://user?id={narrator_id}")  # Burada DM linki eklendi
+            InlineKeyboardButton("✍️ Kelime Yaz", url=f"tg://user?id={BOT_ID}")  # artık botun DM'ine yönlendirir
         ]
     ]
     context.bot.send_message(
