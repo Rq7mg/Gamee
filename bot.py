@@ -44,6 +44,7 @@ def start(update, context):
     text = (
         f"Merhaba! Ben Telegram Tabu Oyun Botu 😄\n"
         f"Hoşgeldiniz {chat_title}\n Keyifli Oyunlar"
+        
         "Komutlar:\n"
         "/start → Bu mesajı gösterir\n"
         "/game → Oyunu başlatır\n"
