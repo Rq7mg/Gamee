@@ -1,7 +1,6 @@
-import json
+import os
 import random
 import time
-import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 import pymongo
@@ -25,6 +24,8 @@ group_chat_id = None
 last_activity = time.time()
 scores = {}  # Her oyun sıfırdan başlar
 sudo_users = set([OWNER_ID])
+duyuru_count = 0  # kaç kişiye ulaştı
+groups_data = {}  # Her grup için kullanıcı sayısı saklanacak
 
 # Kelime seç
 def pick_word():
@@ -35,8 +36,14 @@ def pick_word():
 
 # /start
 def start(update, context):
+    chat_id = update.effective_chat.id
+    chat_title = update.effective_chat.title or update.effective_chat.username or "Özel Chat"
+    # Grup veri kaydı
+    if chat_id not in groups_data:
+        groups_data[chat_id] = {"title": chat_title, "users": 0}
     text = (
-        "Merhaba! Telegram Tabu Oyun Botu 😄\n"
+        f"Merhaba! Ben Telegram Tabu Oyun Botu 😄\n"
+        f"Bu grup: {chat_title}\n"
         "Komutlar:\n"
         "/start → Bu mesajı gösterir\n"
         "/game → Oyunu başlatır\n"
@@ -50,6 +57,12 @@ def start(update, context):
         ]
     ]
     update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+# /starts → kaç kullanıcı ve kaç grup
+def starts(update, context):
+    total_groups = len(groups_data)
+    total_users = sum([v["users"] for v in groups_data.values()])
+    update.message.reply_text(f"📊 Toplam Gruplar: {total_groups}\nToplam Kullanıcılar: {total_users}")
 
 # /wordcount
 def word_count(update, context):
@@ -106,27 +119,49 @@ def add_word(update, context):
 
 # /duyuru
 def duyuru(update, context):
+    global duyuru_count
     user = update.message.from_user
     if user.id not in sudo_users:
         update.message.reply_text("❌ Sadece sudo kullanıcılar kullanabilir.")
         return
+
+    msg_text = ""
+    chat_title = ""
+
     if update.message.reply_to_message:
-        # Yanıtlanan mesajı al
-        msg = update.message.reply_to_message.text or "Medya mesajı"
-        chat_title = update.message.reply_to_message.chat.title or update.message.reply_to_message.chat.username
-        context.bot.send_message(group_chat_id, f"📢 Duyuru ({chat_title}):\n{msg}")
+        reply_msg = update.message.reply_to_message
+        if reply_msg.text:
+            msg_text = reply_msg.text
+        elif reply_msg.caption:
+            msg_text = reply_msg.caption
+        else:
+            msg_text = "<Medya mesajı>"
+        chat_title = reply_msg.chat.title or reply_msg.chat.username or "Bilinmeyen Kanal"
     else:
         text = " ".join(context.args)
         if not text:
             update.message.reply_text("❌ Kullanım: /duyuru metin")
             return
-        context.bot.send_message(group_chat_id, f"📢 Duyuru:\n{text}")
+        msg_text = text
+        chat_title = "Duyuru"
+
+    # Her gruba gönder
+    count = 0
+    for gid in groups_data:
+        try:
+            context.bot.send_message(gid, f"📢 Duyuru ({chat_title}):\n{msg_text}")
+            count += 1
+        except:
+            continue
+    duyuru_count += count
+    update.message.reply_text(f"✅ Duyuru gönderildi. Toplam {count} gruba ulaştı.")
 
 # /game
 def game(update, context):
     global group_chat_id, scores
     group_chat_id = update.effective_chat.id
     scores = {}
+    groups_data[group_chat_id]["users"] = update.effective_chat.get_members_count() if hasattr(update.effective_chat, "get_members_count") else 0
     keyboard = [
         [InlineKeyboardButton("🎤 Sesli", callback_data="voice")],
         [InlineKeyboardButton("⌨️ Yazılı (Bakımda)", callback_data="text_maintenance")]
@@ -200,7 +235,6 @@ def guess(update, context):
         user = update.message.from_user
         scores[user.first_name] = scores.get(user.first_name, 0) + 1
         update.message.reply_text(f"🎉 {user.first_name} doğru bildi!")
-        # Yeni kelimeyi grup mesajında göster
         current_word, current_hint = pick_word()
         send_game_message(context)
 
@@ -236,6 +270,7 @@ def main():
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
     dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("starts", starts))
     dp.add_handler(CommandHandler("game", game))
     dp.add_handler(CommandHandler("stop", stop))
     dp.add_handler(CommandHandler("wordcount", word_count))
