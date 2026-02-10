@@ -2,16 +2,10 @@ import json
 import random
 import time
 import os
-from flask import Flask, request
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Dispatcher, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 
-TOKEN = os.environ.get("BOT_TOKEN")
-HEROKU_APP_NAME = os.environ.get("HEROKU_APP_NAME")  # Örn: "my-bot-app"
-
-bot = Bot(TOKEN)
-app = Flask(__name__)
-dispatcher = Dispatcher(bot, None, workers=0, use_context=True)
+TOKEN = os.environ.get("BOT_TOKEN")  # Heroku env değişkeni
 
 # Oyun değişkenleri
 game_active = False
@@ -40,10 +34,8 @@ def save_scores(scores):
         json.dump(scores, f)
 
 def pick_word():
-    if not WORDS:
-        return "Kelime yok", "Veritabanında kelime bulunamadı"
     w = random.choice(WORDS)
-    return w.get("word", "Bilinmeyen"), w.get("hint", "İpucu yok")
+    return w["word"], w["hint"]
 
 # /start komutu
 def start(update, context):
@@ -69,8 +61,8 @@ def game(update, context):
     group_chat_id = update.effective_chat.id
 
     keyboard = [
-        [InlineKeyboardButton("🎤 Sesli Mod", callback_data="mode_voice")],
-        [InlineKeyboardButton("⌨️ Yazılı Mod", callback_data="mode_text")]
+        [InlineKeyboardButton("🎤 Sesli Mod", callback_data="voice")],
+        [InlineKeyboardButton("⌨️ Yazılı Mod", callback_data="text")]
     ]
 
     update.message.reply_text(
@@ -81,17 +73,20 @@ def game(update, context):
 # Mod seçimi
 def mode_select(update, context):
     global game_active, narrator_id, current_word, current_hint, mode, last_activity
+
     query = update.callback_query
     query.answer()
-    mode = query.data.split("_")[1]
+
     game_active = True
     narrator_id = query.from_user.id
+    mode = query.data
     current_word, current_hint = pick_word()
     last_activity = time.time()
-    send_new_round(context, group_chat_id, current_hint)
 
-# 3 butonlu yeni tur mesajı
-def send_new_round(context, chat_id, hint):
+    send_game_message(context)
+
+def send_game_message(context):
+    global group_chat_id, narrator_id, current_word, current_hint
     keyboard = [
         [
             InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look"),
@@ -99,24 +94,30 @@ def send_new_round(context, chat_id, hint):
             InlineKeyboardButton("✍️ Kelime Yaz", callback_data="write")
         ]
     ]
-    text = f"🆕 Yeni kelime için butonlar hazır! İpucu: {hint}"
-    context.bot.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(keyboard))
+    context.bot.send_message(
+        group_chat_id,
+        f"Oyun başladı!\nMod: {mode}\nAnlatıcı: {context.bot.get_chat_member(group_chat_id, narrator_id).user.first_name}\nİpucu: {current_hint}",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 # Buton mantığı
 def button(update, context):
     global current_word, current_hint, narrator_id, last_activity
     query = update.callback_query
     user = query.from_user
+
     if user.id != narrator_id:
         query.answer("Sadece anlatıcı görebilir.", show_alert=True)
         return
+
     last_activity = time.time()
+
     if query.data == "look":
         query.answer(f"Kelime: {current_word}\nİpucu: {current_hint}", show_alert=True)
     elif query.data == "next":
         current_word, current_hint = pick_word()
-        query.answer(f"Yeni kelime hazır! İpucu: {current_hint}", show_alert=True)
-        send_new_round(context, group_chat_id, current_hint)
+        send_game_message(context)
+        query.answer("Yeni kelime atandı!", show_alert=True)
     elif query.data == "write":
         try:
             context.bot.send_message(narrator_id, "✍️ Yeni kelimeyi yazın. Bu kelime artık oyun kelimesi olacak.")
@@ -126,41 +127,49 @@ def button(update, context):
 
 # Tahmin kontrolü
 def guess(update, context):
-    global narrator_id, current_word, current_hint, last_activity, mode
+    global narrator_id, current_word, current_hint, last_activity
     if not game_active:
         return
+
     text = update.message.text.strip()
     last_activity = time.time()
+
     # DM'den yeni kelime
     if update.message.chat.type == "private" and update.message.from_user.id == narrator_id:
         current_word = text
         current_hint = "Kullanıcı tarafından girildi"
         context.bot.send_message(narrator_id, f"Yeni kelime ayarlandı: {current_word}")
+        send_game_message(context)
         return
+
     # Grup tahmini
     if text.lower() == current_word.lower():
         user = update.message.from_user
         scores = load_scores()
         scores[user.first_name] = scores.get(user.first_name, 0) + 1
         save_scores(scores)
+
         update.message.reply_text(f"🎉 {user.first_name} doğru bildi! +1 puan")
-        # Yeni kelime seçimi
-        current_word, current_hint = pick_word()
+
         if mode == "text":
             narrator_id = user.id
             context.bot.send_message(narrator_id, f"Siz artık anlatıcısınız! Kelimeyi anlatın.")
-            context.bot.send_message(narrator_id, f"Yeni kelime:\n{current_word}\nİpucu: {current_hint}")
-        # Grup için yeni 3 butonlu mesaj
-        send_new_round(context, group_chat_id, current_hint)
+            current_word, current_hint = pick_word()
+            send_game_message(context)
+        else:
+            current_word, current_hint = pick_word()
+            send_game_message(context)
 
 # /stop komutu
 def stop(update, context):
     global game_active
     admins = context.bot.get_chat_administrators(update.effective_chat.id)
     admin_ids = [a.user.id for a in admins]
+
     if update.message.from_user.id not in admin_ids:
         update.message.reply_text("Sadece adminler durdurabilir.")
         return
+
     end_game(context)
 
 # Oyun bitirme ve lider tablosu
@@ -181,29 +190,22 @@ def timer_check(context):
         context.bot.send_message(group_chat_id, "⏱ 5 dk işlem yok. Oyun bitti.")
         end_game(context)
 
-# Webhook endpoint
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
-    dispatcher.process_update(update)
-    return "ok"
-
 # Main
+def main():
+    updater = Updater(TOKEN, use_context=True)
+    dp = updater.dispatcher
+
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("game", game))
+    dp.add_handler(CommandHandler("stop", stop))
+    dp.add_handler(CallbackQueryHandler(mode_select, pattern="voice|text"))
+    dp.add_handler(CallbackQueryHandler(button, pattern="look|next|write"))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, guess))
+
+    updater.job_queue.run_repeating(timer_check, interval=10)
+
+    updater.start_polling()
+    updater.idle()
+
 if __name__ == "__main__":
-    from telegram.ext import JobQueue
-    # Dispatcher job_queue kullanımı
-    dispatcher.job_queue = JobQueue()
-    dispatcher.job_queue.start()
-    dispatcher.job_queue.run_repeating(timer_check, interval=10, first=10)
-
-    # Handler ekleme
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("game", game))
-    dispatcher.add_handler(CommandHandler("stop", stop))
-    dispatcher.add_handler(CallbackQueryHandler(mode_select, pattern=r"^mode_"))
-    dispatcher.add_handler(CallbackQueryHandler(button, pattern=r"^(look|next|write)$"))
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, guess))
-
-    # Heroku webhook ayarı
-    bot.set_webhook(f"https://{HEROKU_APP_NAME}.herokuapp.com/{TOKEN}")
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    main()
