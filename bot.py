@@ -131,23 +131,19 @@ def add_word(update, context):
     words_col.insert_one({"word": word_lower, "hint": hint})
     update.message.reply_text(f"✅ Kelime eklendi: {word} - {hint}")
 
-# /game
+# /game → mod seçimi
 def game(update, context):
-    global group_chat_id, scores
+    global group_chat_id
     group_chat_id = update.effective_chat.id
-    scores = {}
     keyboard = [
-        [InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look")],
-        [
-            InlineKeyboardButton("➡️ Kelimeyi Geç", callback_data="next"),
-            InlineKeyboardButton("✍️ Kelime Yaz", url=f"tg://user?id={context.bot.id}")
-        ]
+        [InlineKeyboardButton("🎤 Sesli", callback_data="voice")],
+        [InlineKeyboardButton("⌨️ Yazılı (Bakımda)", callback_data="text_maintenance")]
     ]
-    update.message.reply_text("Oyun başladı! 🎉", reply_markup=InlineKeyboardMarkup(keyboard))
+    update.message.reply_text("Oyun modu seç:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 # Mod seçimi
 def mode_select(update, context):
-    global game_active, narrator_id, current_word, current_hint, mode, last_activity
+    global game_active, narrator_id, current_word, current_hint, mode, last_activity, scores
     query = update.callback_query
     query.answer()
     if query.data == "text_maintenance":
@@ -158,27 +154,23 @@ def mode_select(update, context):
     mode = query.data
     current_word, current_hint = pick_word()
     last_activity = time.time()
-    # Artık mesajda mod ve anlatıcı yazmıyor
+    scores = {}
     send_game_message(context)
 
-# Oyun mesajı
-def send_game_message(context, extra_msg=None):
+# Oyun mesajı → buton düzeni ve gizlilik
+def send_game_message(context, correct_user=None):
     global group_chat_id, narrator_id, current_word, current_hint
+    BOT_ID = context.bot.id
     keyboard = [
         [InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look")],
-        [
-            InlineKeyboardButton("➡️ Kelimeyi Geç", callback_data="next"),
-            InlineKeyboardButton("✍️ Kelime Yaz", url=f"tg://user?id={context.bot.id}")
-        ]
+        [InlineKeyboardButton("➡️ Kelimeyi Geç", callback_data="next"),
+         InlineKeyboardButton("✍️ Kelime Yaz", url=f"tg://user?id={BOT_ID}")]
     ]
-    text = ""
-    if extra_msg:
-        text += extra_msg + "\n\n"
-    context.bot.send_message(
-        group_chat_id,
-        text + f"Yeni kelime geldi!",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    message_text = ""
+    if correct_user:
+        message_text += f"🎉 {correct_user} doğru bildi!\n\n"
+    message_text += f"Anlatıcı: {context.bot.get_chat_member(group_chat_id, narrator_id).user.first_name}"
+    context.bot.send_message(group_chat_id, message_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 # Buton işlemleri
 def button(update, context):
@@ -193,7 +185,7 @@ def button(update, context):
         query.answer(f"Kelime: {current_word}\nİpucu: {current_hint}", show_alert=True)
     elif query.data == "next":
         current_word, current_hint = pick_word()
-        send_game_message(context)
+        query.answer("Yeni kelime atandı! Kelimeye Bak kısmında (;", show_alert=True)
 
 # Tahmin kontrolü
 def guess(update, context):
@@ -212,9 +204,8 @@ def guess(update, context):
     if text.lower() == current_word.lower():
         user = update.message.from_user
         scores[user.first_name] = scores.get(user.first_name, 0) + 1
-        extra_msg = f"🎉 {user.first_name} doğru bildi!"
         current_word, current_hint = pick_word()
-        send_game_message(context, extra_msg)
+        send_game_message(context, correct_user=user.first_name)
 
 # /stop
 def stop(update, context):
@@ -230,7 +221,10 @@ def stop(update, context):
 def end_game(context):
     global game_active
     game_active = False
-    ranking = f"🏆 Lider Tablosu\n\nAnlatıcı ({context.bot.get_chat_member(group_chat_id, narrator_id).user.first_name}): Ağzına sağlık\n\n"
+    ranking = "🏆 Lider Tablosu\n\n"
+    if narrator_id:
+        narrator_name = context.bot.get_chat_member(group_chat_id, narrator_id).user.first_name
+        ranking += f"{narrator_name} ağzına sağlık\n"
     sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     for name, score in sorted_scores:
         ranking += f"{name}: {score} puan\n"
