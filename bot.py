@@ -3,9 +3,9 @@ import random
 import time
 import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import *
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 
-TOKEN = os.environ.get("BOT_TOKEN")
+TOKEN = os.environ.get("BOT_TOKEN")  # Heroku env değişkeni
 
 # Oyun değişkenleri
 game_active = False
@@ -21,6 +21,7 @@ with open("words.json", encoding="utf-8") as f:
     WORDS = json.load(f)
 
 SCORES_FILE = "scores.json"
+
 def load_scores():
     try:
         with open(SCORES_FILE, encoding="utf-8") as f:
@@ -54,7 +55,7 @@ def start(update, context):
     )
     update.message.reply_text(text)
 
-# Oyun başlat
+# /game komutu
 def game(update, context):
     global group_chat_id
     group_chat_id = update.effective_chat.id
@@ -95,44 +96,31 @@ def mode_select(update, context):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# Butonlar
+# Buton mantığı
 def button(update, context):
     global current_word, current_hint, narrator_id, last_activity
     query = update.callback_query
     user = query.from_user
-    query.answer()
 
     if user.id != narrator_id:
         query.answer("Sadece anlatıcı görebilir.", show_alert=True)
         return
 
-    if query.data == "look":
-        # ✅ Grup içinde popup göster
-        query.answer(
-            text=f"Kelime: {current_word}\nİpucu: {current_hint}",
-            show_alert=True
-        )
-    elif query.data == "next":
-        # ✅ Grup içinde popup göster
-        current_word, current_hint = pick_word()
-        last_activity = time.time()
-        query.answer(
-            text=f"Yeni kelime:\n{current_word}\nİpucu: {current_hint}",
-            show_alert=True
-        )
-    elif query.data == "write":
-        # ✅ DM ile kelime yazdır
-        last_activity = time.time()
-        try:
-            context.bot.send_message(
-                narrator_id,
-                "✍️ Anlatacağınız yeni kelimeyi yazın. Bu kelime artık oyun kelimesi olacak."
-            )
-            query.answer("Özel mesaj gönderildi, kelimeyi yazın!", show_alert=True)
-        except:
-            query.answer("Özel mesaja gönderilemedi, botla DM açın.", show_alert=True)
+    last_activity = time.time()
 
-# Tahmin
+    if query.data == "look":
+        query.answer(f"Kelime: {current_word}\nİpucu: {current_hint}", show_alert=True)
+    elif query.data == "next":
+        current_word, current_hint = pick_word()
+        query.answer(f"Yeni kelime:\n{current_word}\nİpucu: {current_hint}", show_alert=True)
+    elif query.data == "write":
+        try:
+            context.bot.send_message(narrator_id, "✍️ Yeni kelimeyi yazın. Bu kelime artık oyun kelimesi olacak.")
+            query.answer("Özel mesaja gönderildi, kelimeyi yazın!", show_alert=True)
+        except:
+            query.answer("Özel mesaja gönderilemedi. Bot ile DM açın.", show_alert=True)
+
+# Tahmin kontrolü
 def guess(update, context):
     global narrator_id, current_word, current_hint, last_activity
     if not game_active:
@@ -164,10 +152,9 @@ def guess(update, context):
             context.bot.send_message(narrator_id, f"Yeni kelime:\n{current_word}\nİpucu: {current_hint}")
         else:
             current_word, current_hint = pick_word()
-            # Popup yerine DM yerine anlatıcıya tekrar mesaj
             context.bot.send_message(narrator_id, f"Yeni kelime:\n{current_word}\nİpucu: {current_hint}")
 
-# Stop
+# /stop komutu
 def stop(update, context):
     global game_active
     admins = context.bot.get_chat_administrators(update.effective_chat.id)
@@ -179,7 +166,7 @@ def stop(update, context):
 
     end_game(context)
 
-# Oyun bitirme
+# Oyun bitirme ve lider tablosu
 def end_game(context):
     global game_active
     game_active = False
@@ -190,7 +177,7 @@ def end_game(context):
         ranking += f"{name}: {score} puan\n"
     context.bot.send_message(group_chat_id, ranking)
 
-# 5 dk inactivity
+# 5 dk inactivity kontrol
 def timer_check(context):
     global game_active
     if game_active and time.time() - last_activity > 300:
