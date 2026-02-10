@@ -89,6 +89,11 @@ def mode_select(update, context):
     current_word, current_hint = pick_word()
     last_activity = time.time()
 
+    send_new_round(group_chat_id, current_hint)
+
+# Grup için 3 butonlu yeni tur mesajı
+def send_new_round(chat_id, hint):
+    global current_word
     keyboard = [
         [
             InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look"),
@@ -96,11 +101,8 @@ def mode_select(update, context):
             InlineKeyboardButton("✍️ Kelime Yaz", callback_data="write")
         ]
     ]
-
-    query.message.reply_text(
-        f"Oyun başladı!\nMod: {mode}\nAnlatıcı: {query.from_user.first_name}",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    text = f"🆕 Yeni kelime için butonlar hazır! İpucu: {hint}"
+    context.bot.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 # Buton mantığı
 def button(update, context):
@@ -119,6 +121,7 @@ def button(update, context):
     elif query.data == "next":
         current_word, current_hint = pick_word()
         query.answer(f"Yeni kelime hazır! İpucu: {current_hint}", show_alert=True)
+        send_new_round(group_chat_id, current_hint)
     elif query.data == "write":
         try:
             context.bot.send_message(narrator_id, "✍️ Yeni kelimeyi yazın. Bu kelime artık oyun kelimesi olacak.")
@@ -128,7 +131,7 @@ def button(update, context):
 
 # Tahmin kontrolü
 def guess(update, context):
-    global narrator_id, current_word, current_hint, last_activity
+    global narrator_id, current_word, current_hint, last_activity, mode
     if not game_active:
         return
 
@@ -159,11 +162,8 @@ def guess(update, context):
             context.bot.send_message(narrator_id, f"Siz artık anlatıcısınız! Kelimeyi anlatın.")
             context.bot.send_message(narrator_id, f"Yeni kelime:\n{current_word}\nİpucu: {current_hint}")
 
-        # **Sesli modda ve yazılı modda grup için ayrı mesaj**
-        try:
-            context.bot.send_message(group_chat_id, f"🆕 Yeni kelime geldi! İpucu: {current_hint}")
-        except:
-            print("Yeni kelime mesajı gönderilemedi. Chat ID hatası olabilir.")
+        # **Her durumda grup için yeni 3 butonlu mesaj**
+        send_new_round(group_chat_id, current_hint)
 
 # /stop komutu
 def stop(update, context):
