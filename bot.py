@@ -5,9 +5,9 @@ import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import *
 
-# Heroku ENV
 TOKEN = os.environ.get("BOT_TOKEN")
 
+# Oyun değişkenleri
 game_active = False
 mode = None
 current_word = None
@@ -46,9 +46,9 @@ def start(update, context):
         "/stop → Oyunu durdurur (sadece admin)\n\n"
         "Oyun özellikleri:\n"
         "- Sesli ve yazılı mod\n"
-        "- Kelimeyi görmek için '👀 Kelimeye Bak' butonu\n"
-        "- Yeni kelime için '➡️ Kelimeyi Geç'\n"
-        "- Kelimeyi kendiniz belirlemek için '✍️ Kelime Yaz'\n"
+        "- 👀 Kelimeye Bak → popup, kelime ve ipucu\n"
+        "- ➡️ Kelimeyi Geç → yeni kelime popup ile anlatıcıya\n"
+        "- ✍️ Kelime Yaz → özel mesaj ile anlatıcı yeni kelime belirler\n"
         "- Doğru tahmin +1 puan, lider tablosu\n"
         "- 5 dk işlem yoksa oyun otomatik biter"
     )
@@ -95,11 +95,8 @@ def mode_select(update, context):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-    # Anlatıcıya özel kelime gönder
-    context.bot.send_message(
-        narrator_id,
-        f"Kelimeniz:\n{current_word}\nİpucu: {current_hint}"
-    )
+    # Anlatıcıya özel popup gönder
+    query.answer(text=f"Kelimeniz ve ipucu gönderildi.", show_alert=True)
 
 # Butonlar
 def button(update, context):
@@ -113,23 +110,30 @@ def button(update, context):
         return
 
     if query.data == "look":
+        # Popup göster
         query.answer(
             text=f"Kelime: {current_word}\nİpucu: {current_hint}",
             show_alert=True
         )
     elif query.data == "next":
+        # Yeni kelime popup
         current_word, current_hint = pick_word()
         last_activity = time.time()
-        context.bot.send_message(
-            narrator_id,
-            f"Yeni kelime:\n{current_word}\nİpucu: {current_hint}"
+        query.answer(
+            text=f"Yeni kelime:\n{current_word}\nİpucu: {current_hint}",
+            show_alert=True
         )
     elif query.data == "write":
+        # Özel mesaj ile kelime yazdır
         last_activity = time.time()
-        context.bot.send_message(
-            narrator_id,
-            "✍️ Anlatacağınız yeni kelimeyi yazın."
-        )
+        try:
+            context.bot.send_message(
+                narrator_id,
+                "✍️ Anlatacağınız yeni kelimeyi yazın. Bu kelime artık oyun kelimesi olacak."
+            )
+            query.answer("Özel mesaj gönderildi, kelimeyi yazın!", show_alert=True)
+        except:
+            query.answer("Özel mesaja gönderilemedi, botla DM açın.", show_alert=True)
 
 # Tahmin
 def guess(update, context):
@@ -163,7 +167,7 @@ def guess(update, context):
             current_word, current_hint = pick_word()
             context.bot.send_message(narrator_id, f"Yeni kelime:\n{current_word}\nİpucu: {current_hint}")
         else:
-            # Sesli mod → yeni kelime anlatıcıya gider
+            # Sesli mod → yeni kelime popup
             current_word, current_hint = pick_word()
             context.bot.send_message(narrator_id, f"Yeni kelime:\n{current_word}\nİpucu: {current_hint}")
 
