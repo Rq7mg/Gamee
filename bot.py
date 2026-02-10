@@ -158,38 +158,32 @@ def mode_select(update, context):
     send_game_message(context)
 
 # Oyun mesajı → buton düzeni ve gizlilik
-def send_game_message(context, correct_user=None):
+def send_game_message(context):
     global group_chat_id, narrator_id, current_word, current_hint
     BOT_ID = context.bot.id
     keyboard = [
         [InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look")],
-        [InlineKeyboardButton("➡️ Kelimeyi Geç", callback_data="next"),
+        [InlineKeyboardButton("➡️ Kelimeyi Değiştir", callback_data="next"),
          InlineKeyboardButton("✍️ Kelime Yaz", url=f"tg://user?id={BOT_ID}")]
     ]
-    message_text = ""
-    if correct_user:
-        message_text += f"🎉 {correct_user} doğru bildi!\n\n"
-    # Kelime ve tanım (tanım başında emoji)
-    message_text += f"🎯 Kelime: {current_word}\n📌 Tanım: {current_hint}"
-    context.bot.send_message(group_chat_id, message_text, reply_markup=InlineKeyboardMarkup(keyboard))
+    context.bot.send_message(group_chat_id,
+                             f"Anlatıcı: {context.bot.get_chat_member(group_chat_id, narrator_id).user.first_name}",
+                             reply_markup=InlineKeyboardMarkup(keyboard))
 
 # Buton işlemleri
 def button(update, context):
     global current_word, current_hint, narrator_id, last_activity
     query = update.callback_query
     user = query.from_user
+    if user.id != narrator_id:
+        query.answer("Sadece anlatıcı görebilir.", show_alert=True)
+        return
     last_activity = time.time()
     if query.data == "look":
-        if user.id == narrator_id:
-            query.answer(f"🎯 Kelime: {current_word}\n📌 Tanım: {current_hint}", show_alert=True)
-        else:
-            query.answer("Sadece anlatıcı görebilir.", show_alert=True)
+        query.answer(f"🎯 Kelime: {current_word}\n📌 Tanım: {current_hint}", show_alert=True)
     elif query.data == "next":
         current_word, current_hint = pick_word()
-        if user.id == narrator_id:
-            query.answer(f"🎯 Yeni Kelime:\n{current_word}\n📌 Tanım: {current_hint}", show_alert=True)
-        else:
-            query.answer("Sadece anlatıcı görebilir.", show_alert=True)
+        query.answer(f"🎯 Yeni kelime:\n{current_word}\n📌 Tanım: {current_hint}", show_alert=True)
 
 # Tahmin kontrolü
 def guess(update, context):
@@ -198,18 +192,23 @@ def guess(update, context):
         return
     text = update.message.text.strip()
     last_activity = time.time()
+
     # Özelden yeni kelime
     if update.message.chat.type == "private" and update.message.from_user.id == narrator_id:
         current_word = text
         current_hint = "Kullanıcı tarafından girildi"
-        context.bot.send_message(narrator_id, f"Yeni kelime ayarlandı: {current_word}")
+        context.bot.send_message(narrator_id, f"🎯 Yeni kelime:\n{current_word}\n📌 Tanım: {current_hint}")
         return
+
     # Grup tahmini
     if text.lower() == current_word.lower():
         user = update.message.from_user
         scores[user.first_name] = scores.get(user.first_name, 0) + 1
+        # Grup sadece kullanıcı doğru bildi mesajı alır
+        update.message.reply_text(f"🎉 {user.first_name} doğru bildi!")
+        # Yeni kelime sadece anlatıcıya pop-up
         current_word, current_hint = pick_word()
-        send_game_message(context, correct_user=user.first_name)
+        context.bot.send_message(narrator_id, f"🎯 Yeni kelime:\n{current_word}\n📌 Tanım: {current_hint}")
 
 # /stop
 def stop(update, context):
@@ -231,8 +230,8 @@ def end_game(context):
         ranking += f"Anlatıcı: {narrator_name}\n"
     ranking += "Kazananlar:\n"
     sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    for i, (name, score) in enumerate(sorted_scores, 1):
-        ranking += f"{i}. {name}: {score} puan\n"
+    for idx, (name, score) in enumerate(sorted_scores, 1):
+        ranking += f"{idx}. {name}: {score} puan\n"
     context.bot.send_message(group_chat_id, ranking)
 
 # 5 dk inactivity kontrol
