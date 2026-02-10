@@ -1,0 +1,25 @@
+{
+  "name": "kelime-botu",
+  "description": "Telegram kelime oyunu botu (sesli ve yazılı modlu, puan sistemi, lider tablosu)",
+  "repository": "https://github.com/Rq7mg/Gamee",
+  "keywords": ["telegram", "bot", "game", "kelime"],
+  "env": {
+    "BOT_TOKEN": {
+      "description": "Telegram Bot Token (BotFather'dan alın)",
+      "required": true
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "formation": {
+    "worker": {
+      "quantity": 1
+    }
+  },
+  "scripts": {
+    "postdeploy": "echo 'Bot deploy edildi! Botunuz başlatılacak.'"
+  }
+}
