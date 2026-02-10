@@ -151,14 +151,19 @@ def guess(update, context):
 
         update.message.reply_text(f"🎉 {user.first_name} doğru bildi! +1 puan")
 
+        # Yeni kelime seçimi
+        current_word, current_hint = pick_word()
+
         if mode == "text":
             narrator_id = user.id
             context.bot.send_message(narrator_id, f"Siz artık anlatıcısınız! Kelimeyi anlatın.")
-            current_word, current_hint = pick_word()
             context.bot.send_message(narrator_id, f"Yeni kelime:\n{current_word}\nİpucu: {current_hint}")
-        else:
-            current_word, current_hint = pick_word()
-            context.bot.send_message(narrator_id, f"Yeni kelime:\n{current_word}\nİpucu: {current_hint}")
+
+        # **Sesli modda ve yazılı modda grup için ayrı mesaj**
+        try:
+            context.bot.send_message(group_chat_id, f"🆕 Yeni kelime geldi! İpucu: {current_hint}")
+        except:
+            print("Yeni kelime mesajı gönderilemedi. Chat ID hatası olabilir.")
 
 # /stop komutu
 def stop(update, context):
