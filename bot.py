@@ -5,7 +5,7 @@ import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 
-TOKEN = os.environ.get("BOT_TOKEN")  # Heroku env değişkeni
+TOKEN = os.environ.get("BOT_TOKEN")
 
 # Oyun değişkenleri
 game_active = False
@@ -67,8 +67,8 @@ def game(update, context):
     group_chat_id = update.effective_chat.id
 
     keyboard = [
-        [InlineKeyboardButton("🎤 Sesli Mod", callback_data="voice")],
-        [InlineKeyboardButton("⌨️ Yazılı Mod", callback_data="text")]
+        [InlineKeyboardButton("🎤 Sesli Mod", callback_data="mode_voice")],
+        [InlineKeyboardButton("⌨️ Yazılı Mod", callback_data="mode_text")]
     ]
 
     update.message.reply_text(
@@ -83,16 +83,18 @@ def mode_select(update, context):
     query = update.callback_query
     query.answer()
 
+    # Callback data'dan modu al
+    mode = query.data.split("_")[1]  # voice veya text
+
     game_active = True
     narrator_id = query.from_user.id
-    mode = query.data
     current_word, current_hint = pick_word()
     last_activity = time.time()
 
-    send_new_round(group_chat_id, current_hint)
+    send_new_round(context, group_chat_id, current_hint)
 
-# Grup için 3 butonlu yeni tur mesajı
-def send_new_round(chat_id, hint):
+# 3 butonlu yeni tur mesajı
+def send_new_round(context, chat_id, hint):
     global current_word
     keyboard = [
         [
@@ -121,7 +123,7 @@ def button(update, context):
     elif query.data == "next":
         current_word, current_hint = pick_word()
         query.answer(f"Yeni kelime hazır! İpucu: {current_hint}", show_alert=True)
-        send_new_round(group_chat_id, current_hint)
+        send_new_round(context, group_chat_id, current_hint)
     elif query.data == "write":
         try:
             context.bot.send_message(narrator_id, "✍️ Yeni kelimeyi yazın. Bu kelime artık oyun kelimesi olacak.")
@@ -162,8 +164,8 @@ def guess(update, context):
             context.bot.send_message(narrator_id, f"Siz artık anlatıcısınız! Kelimeyi anlatın.")
             context.bot.send_message(narrator_id, f"Yeni kelime:\n{current_word}\nİpucu: {current_hint}")
 
-        # **Her durumda grup için yeni 3 butonlu mesaj**
-        send_new_round(group_chat_id, current_hint)
+        # Grup için 3 butonlu yeni mesaj
+        send_new_round(context, group_chat_id, current_hint)
 
 # /stop komutu
 def stop(update, context):
@@ -213,8 +215,9 @@ def main():
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("game", game))
     dp.add_handler(CommandHandler("stop", stop))
-    dp.add_handler(CallbackQueryHandler(mode_select, pattern="voice|text"))
-    dp.add_handler(CallbackQueryHandler(button, pattern="look|next|write"))
+    # CallbackQueryHandler pattern regex düzeltildi
+    dp.add_handler(CallbackQueryHandler(mode_select, pattern=r"^mode_"))
+    dp.add_handler(CallbackQueryHandler(button, pattern=r"^(look|next|write)$"))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, guess))
 
     updater.job_queue.run_repeating(timer_check, 10)
