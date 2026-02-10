@@ -4,7 +4,8 @@ import time
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import *
 
-TOKEN = "BOT_TOKEN_BURAYA"
+import os
+TOKEN = os.environ.get("BOT_TOKEN")"
 
 game_active = False
 mode = None
