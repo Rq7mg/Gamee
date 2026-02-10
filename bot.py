@@ -156,7 +156,7 @@ def button(update, context):
         query.answer(f"Kelime: {current_word}\nİpucu: {current_hint}", show_alert=True)
     elif query.data == "next":
         current_word, current_hint = pick_word()
-        query.answer("Yeni kelime atandı! Popup olarak görülebilir.", show_alert=True)
+        query.answer("Yeni kelime atandı! Kelimeye Bak kısmında (;", show_alert=True)
     elif query.data == "write":
         context.bot.send_message(narrator_id, "✍️ Yeni kelimeyi yazın .")
         query.answer("Özel mesaj açıldı.", show_alert=True)
