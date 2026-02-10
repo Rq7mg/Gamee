@@ -42,7 +42,14 @@ def start(update, context):
         "/game → Oyunu başlatır\n"
         "/stop → Oyunu durdurur (admin)\n"
     )
-    update.message.reply_text(text)
+    keyboard = [
+        [
+            InlineKeyboardButton("👑 Sahip", url=f"tg://user?id={OWNER_ID}"),
+            InlineKeyboardButton("➕ Gruba Ekle", url=f"https://t.me/{context.bot.username}?startgroup=true"),
+            InlineKeyboardButton("💬 Destek Kanalı", url="https://t.me/kiyiciupdate")
+        ]
+    ]
+    update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 # /wordcount
 def word_count(update, context):
@@ -97,6 +104,24 @@ def add_word(update, context):
     words_col.insert_one({"word": word_lower, "hint": hint})
     update.message.reply_text(f"✅ Kelime eklendi: {word} - {hint}")
 
+# /duyuru
+def duyuru(update, context):
+    user = update.message.from_user
+    if user.id not in sudo_users:
+        update.message.reply_text("❌ Sadece sudo kullanıcılar kullanabilir.")
+        return
+    if update.message.reply_to_message:
+        # Yanıtlanan mesajı al
+        msg = update.message.reply_to_message.text or "Medya mesajı"
+        chat_title = update.message.reply_to_message.chat.title or update.message.reply_to_message.chat.username
+        context.bot.send_message(group_chat_id, f"📢 Duyuru ({chat_title}):\n{msg}")
+    else:
+        text = " ".join(context.args)
+        if not text:
+            update.message.reply_text("❌ Kullanım: /duyuru metin")
+            return
+        context.bot.send_message(group_chat_id, f"📢 Duyuru:\n{text}")
+
 # /game
 def game(update, context):
     global group_chat_id, scores
@@ -104,7 +129,7 @@ def game(update, context):
     scores = {}
     keyboard = [
         [InlineKeyboardButton("🎤 Sesli", callback_data="voice")],
-        [InlineKeyboardButton("⌨️ Yazılı", callback_data="text")]
+        [InlineKeyboardButton("⌨️ Yazılı (Bakımda)", callback_data="text_maintenance")]
     ]
     update.message.reply_text("Oyun modu seç:", reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -113,6 +138,9 @@ def mode_select(update, context):
     global game_active, narrator_id, current_word, current_hint, mode, last_activity
     query = update.callback_query
     query.answer()
+    if query.data == "text_maintenance":
+        query.answer("⌨️ Yazılı mod şu anda bakımdadır.", show_alert=True)
+        return
     game_active = True
     narrator_id = query.from_user.id
     mode = query.data
@@ -120,7 +148,7 @@ def mode_select(update, context):
     last_activity = time.time()
     send_game_message(context)
 
-# Oyun mesajı (gruba sadece bir kez veya doğru tahmin sonrası)
+# Oyun mesajı
 def send_game_message(context):
     global group_chat_id, narrator_id, current_word, current_hint
     keyboard = [
@@ -214,7 +242,8 @@ def main():
     dp.add_handler(CommandHandler("addsudo", add_sudo))
     dp.add_handler(CommandHandler("delsudo", del_sudo))
     dp.add_handler(CommandHandler("addword", add_word))
-    dp.add_handler(CallbackQueryHandler(mode_select, pattern="voice|text"))
+    dp.add_handler(CommandHandler("duyuru", duyuru))
+    dp.add_handler(CallbackQueryHandler(mode_select, pattern="voice|text_maintenance"))
     dp.add_handler(CallbackQueryHandler(button, pattern="look|next|write"))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, guess))
     updater.job_queue.run_repeating(timer_check, interval=10)
