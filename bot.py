@@ -9,10 +9,11 @@ TOKEN = os.environ.get("BOT_TOKEN")
 OWNER_ID = int(os.environ.get("OWNER_ID"))
 
 SUDO_FILE = "sudo.json"
-SCORES_FILE = "scores.json"
 
-games = {}
+# Her grup için ayrı oyun state ve skorlar
+games = {}  # chat_id: {active, mode, narrator, word, hint, last, scores}
 
+# Kelimeler
 with open("words.json", encoding="utf-8") as f:
     WORDS = json.load(f)
 
@@ -31,35 +32,26 @@ def save_sudo(data):
 def is_authorized(uid):
     return uid == OWNER_ID or uid in load_sudo()
 
-# ---------- SCORES ----------
-def load_scores():
-    try:
-        with open(SCORES_FILE, encoding="utf-8") as f:
-            return json.load(f)
-    except:
-        return {}
-
-def save_scores(data):
-    with open(SCORES_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f)
-
+# ---------- KELİME SEÇ ----------
 def pick_word():
     w = random.choice(WORDS)
     return w["word"], w["hint"]
 
-# ---------- COMMANDS ----------
+# ---------- KOMUTLAR ----------
 def start(update, context):
     update.message.reply_text("🎮 Kelime Oyunu Botu\n/game ile başla")
 
 def game(update, context):
     chat_id = update.effective_chat.id
+    # Oyun başlarken skorlar sıfırlanıyor
     games[chat_id] = {
         "active": False,
         "mode": None,
         "narrator": None,
         "word": None,
         "hint": None,
-        "last": time.time()
+        "last": time.time(),
+        "scores": {}
     }
 
     keyboard = [
@@ -92,6 +84,7 @@ def send_game(context, chat_id):
         InlineKeyboardButton("✍️ Kelime Yaz", callback_data="write")
     ]]
 
+    # Grup mesajı: sadece mod ve anlatıcı
     context.bot.send_message(
         chat_id,
         f"Oyun başladı!\nMod: {mode_text}\nAnlatıcı: {narrator}",
@@ -110,7 +103,8 @@ def button(update, context):
     g["last"] = time.time()
 
     if q.data == "look":
-        q.answer(f"Kelime: {g['word']}", show_alert=True)
+        # Pop-up: kelime + ipucu
+        q.answer(f"Kelime: {g['word']}\nİpucu: {g['hint']}", show_alert=True)
 
     elif q.data == "next":
         g["word"], g["hint"] = pick_word()
@@ -130,17 +124,17 @@ def guess(update, context):
     text = update.message.text.strip()
     g["last"] = time.time()
 
+    # DM’den yeni kelime ayarı
     if update.message.chat.type == "private" and update.message.from_user.id == g["narrator"]:
         g["word"] = text
         g["hint"] = "manuel"
         send_game(context, chat_id)
         return
 
+    # Grup tahmini
     if text.lower() == g["word"].lower():
         user = update.message.from_user
-        scores = load_scores()
-        scores[user.first_name] = scores.get(user.first_name, 0) + 1
-        save_scores(scores)
+        g["scores"][user.first_name] = g["scores"].get(user.first_name, 0) + 1
 
         update.message.reply_text(f"🎉 {user.first_name} doğru bildi!")
 
@@ -150,7 +144,7 @@ def guess(update, context):
         g["word"], g["hint"] = pick_word()
         send_game(context, chat_id)
 
-# ---------- ADMIN ----------
+# ---------- ADMIN KOMUTLARI ----------
 def addsudo(update, context):
     if update.message.from_user.id != OWNER_ID:
         return
@@ -197,7 +191,6 @@ def stop(update, context):
     chat_id = update.effective_chat.id
     user_id = update.message.from_user.id
 
-    # Owner her zaman durdurabilir
     if user_id != OWNER_ID:
         admins = context.bot.get_chat_administrators(chat_id)
         admin_ids = [a.user.id for a in admins]
@@ -205,12 +198,23 @@ def stop(update, context):
             update.message.reply_text("⛔ Sadece adminler durdurabilir.")
             return
 
-    game = games.get(chat_id)
-    if not game or not game["active"]:
+    g = games.get(chat_id)
+    if not g or not g["active"]:
         update.message.reply_text("❗ Bu grupta aktif oyun yok.")
         return
 
-    game["active"] = False
+    g["active"] = False
+
+    # Grup bazlı lider tablosu
+    ranking = "🏆 Lider Tablosu\n\n"
+    sorted_scores = sorted(g["scores"].items(), key=lambda x: x[1], reverse=True)
+    if sorted_scores:
+        for name, score in sorted_scores:
+            ranking += f"{name}: {score} puan\n"
+    else:
+        ranking += "Hiç puan yok."
+
+    update.message.reply_text(ranking)
     update.message.reply_text("🛑 Oyun durduruldu.")
 
 # ---------- TIMER ----------
@@ -218,14 +222,24 @@ def timer_check(context):
     now = time.time()
     for chat_id, g in list(games.items()):
         if g["active"] and now - g["last"] > 300:
-            context.bot.send_message(chat_id, "⏱ Oyun bitti")
             g["active"] = False
+            # Grup bazlı lider tablosu
+            ranking = "🏆 Lider Tablosu (zaman aşımı)\n\n"
+            sorted_scores = sorted(g["scores"].items(), key=lambda x: x[1], reverse=True)
+            if sorted_scores:
+                for name, score in sorted_scores:
+                    ranking += f"{name}: {score} puan\n"
+            else:
+                ranking += "Hiç puan yok."
+            context.bot.send_message(chat_id, ranking)
+            context.bot.send_message(chat_id, "⏱ 5 dk işlem yok, oyun bitti.")
 
 # ---------- MAIN ----------
 def main():
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
 
+    # Komutlar
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("game", game))
     dp.add_handler(CommandHandler("addsudo", addsudo))
@@ -235,11 +249,14 @@ def main():
     dp.add_handler(CommandHandler("wordcount", wordcount))
     dp.add_handler(CommandHandler("stop", stop))
 
+    # Butonlar
     dp.add_handler(CallbackQueryHandler(mode_select, pattern="voice|text"))
     dp.add_handler(CallbackQueryHandler(button, pattern="look|next|write"))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, guess))
 
+    # Timer
     updater.job_queue.run_repeating(timer_check, 10)
+
     updater.start_polling()
     updater.idle()
 
