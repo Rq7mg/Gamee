@@ -43,7 +43,6 @@ def start(update, context):
         "/start → Bu mesajı gösterir\n"
         "/game → Oyunu başlatır\n"
         "/stop → Oyunu durdurur (sadece admin)\n"
-        "/wordcount → Toplam kelime sayısı\n\n"
         "Oyun özellikleri:\n"
         "- Sesli ve yazılı mod\n"
         "- 👀 Kelimeye Bak → popup (sadece anlatıcı görür)\n"
@@ -112,7 +111,7 @@ def button(update, context):
     user = query.from_user
 
     if user.id != narrator_id:
-        query.answer("Sadece anlatıcı görebilir.", show_alert=True)
+        query.answer("Sadece anlatıcı görebilir seni gidi hınzır.", show_alert=True)
         return
 
     last_activity = time.time()
@@ -121,7 +120,7 @@ def button(update, context):
         query.answer(f"Kelime: {current_word}\nİpucu: {current_hint}", show_alert=True)
     elif query.data == "next":
         current_word, current_hint = pick_word()
-        query.answer("Yeni kelime atandı! Kelime popup olarak anlatıcıya gösterildi.", show_alert=True)
+        query.answer("Yeni kelime atandı! Kelimeye bak kısmından görebilirsin.", show_alert=True)
     elif query.data == "write":
         try:
             context.bot.send_message(narrator_id, "✍️ Yeni kelimeyi yazın. Bu kelime artık oyun kelimesi olacak.")
