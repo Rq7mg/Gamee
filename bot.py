@@ -36,18 +36,11 @@ def pick_word():
 # /start
 def start(update, context):
     text = (
-        "Merhaba! Telegram Kelime Oyunu Botu 😄\n"
+        "Merhaba! Telegram Tabu Oyun Botu 😄\n"
         "Komutlar:\n"
         "/start → Bu mesajı gösterir\n"
         "/game → Oyunu başlatır\n"
         "/stop → Oyunu durdurur (admin)\n"
-        "Oyun özellikleri:\n"
-        "- Sesli/Yazılı mod\n"
-        "- 👀 Kelimeye Bak → popup (sadece anlatıcı)\n"
-        "- ➡️ Kelimeyi Geç → popup\n"
-        "- ✍️ Kelime Yaz → özel mesaj ile yeni kelime\n"
-        "- Doğru tahmin +1 puan, lider tablosu\n"
-        "- 5 dk işlem yoksa oyun otomatik biter"
     )
     update.message.reply_text(text)
 
