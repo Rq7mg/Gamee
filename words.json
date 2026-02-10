@@ -197,7 +197,7 @@
 {"word":"mühendis","hint":"teknik tasarımcı"},
 {"word":"avukat","hint":"hukuk uzmanı"},
 {"word":"hakim","hint":"yasal karar veren kişi"},
-{"word":"savcı","hint":"iddia makamı"}
+{"word":"savcı","hint":"iddia makamı"},
 {"word":"kalp","hint":"vücutta kan pompalayan organ"},
 {"word":"beyin","hint":"sinir sisteminin merkezi"},
 {"word":"akciğer","hint":"nefes alıp veren organ"},
@@ -536,7 +536,7 @@
 {"word":"Cayenne","hint":"Fransız Guyanası başkenti"},
 {"word":"Kingston","hint":"Jamaika başkenti"},
 {"word":"Nassau","hint":"Bahamalar başkenti"},
-{"word":"Helsinki","hint":"Finlandiya başkenti"}
+{"word":"Helsinki","hint":"Finlandiya başkenti"},
 {"word":"Ahmet","hint":"Yaygın erkek ismi"},
 {"word":"Mehmet","hint":"Yaygın erkek ismi"},
 {"word":"Mustafa","hint":"Yaygın erkek ismi"},
@@ -669,7 +669,7 @@
 {"word":"Hazal","hint":"Kadın ismi"},
 {"word":"Efsun","hint":"Kadın ismi"},
 {"word":"Rüya","hint":"Kadın ismi"},
-{"word":"Derya","hint":"Kadın ismi"}
+{"word":"Derya","hint":"Kadın ismi"},
 {"word":"Tarkan","hint":"Pop müzik sanatçısı"},
 {"word":"Sezen Aksu","hint":"Pop müzik ve şarkı yazarı"},
 {"word":"Aleyna Tilki","hint":"Pop şarkıcı"},
