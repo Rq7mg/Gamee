@@ -46,7 +46,7 @@ def track_group(update):
 def start(update, context):
     track_group(update)
     text = (
-        "Merhaba! Telegram Tabu Oyun Botu 😄\n"
+        "Merhaba! Ben Telegram Tabu Oyun Botu 😄\n"
         "Komutlar:\n"
         "/game → Oyunu başlatır\n"
         "/stop → Oyunu durdurur (admin)\n"
