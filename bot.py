@@ -117,33 +117,34 @@ def button(update, context):
 
 # ---------- TAHMİN ----------
 def guess(update, context):
+    text = update.message.text.strip()
+
+    # DM’den yeni kelime atan anlatıcı
+    if update.message.chat.type == "private":
+        for chat_id, g in games.items():
+            if g["active"] and update.message.from_user.id == g["narrator"]:
+                g["word"] = text
+                g["hint"] = "manuel"
+                g["last"] = time.time()
+                send_game(context, chat_id)
+        return
+
+    # Grup tahmini
     chat_id = update.effective_chat.id
     g = games.get(chat_id)
     if not g or not g["active"]:
         return
 
-    text = update.message.text.strip()
     g["last"] = time.time()
-
-    # DM’den yeni kelime ayarlayan anlatıcı
-    if update.message.chat.type == "private" and update.message.from_user.id == g["narrator"]:
-        g["word"] = text
-        g["hint"] = "manuel"
-        send_game(context, chat_id)
-        return
-
-    # Grup tahmini → artık DM’den gelen yeni kelimeyi de kontrol ediyor
     if text.lower() == g["word"].lower():
         user = update.message.from_user
         g["scores"][user.first_name] = g["scores"].get(user.first_name, 0) + 1
 
         update.message.reply_text(f"🎉 {user.first_name} doğru bildi!")
 
-        # Text modunda kazanan artık anlatıcı olur
         if g["mode"] == "text":
             g["narrator"] = user.id
 
-        # Yeni kelime seç ve oyunu güncelle
         g["word"], g["hint"] = pick_word()
         send_game(context, chat_id)
 
@@ -226,7 +227,6 @@ def timer_check(context):
     for chat_id, g in list(games.items()):
         if g["active"] and now - g["last"] > 300:
             g["active"] = False
-            # Grup bazlı lider tablosu
             ranking = "🏆 Lider Tablosu (zaman aşımı)\n\n"
             sorted_scores = sorted(g["scores"].items(), key=lambda x: x[1], reverse=True)
             if sorted_scores:
