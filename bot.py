@@ -5,6 +5,7 @@ import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import *
 
+# Heroku ENV
 TOKEN = os.environ.get("BOT_TOKEN")
 
 # Oyun değişkenleri
@@ -94,9 +95,6 @@ def mode_select(update, context):
         f"Oyun başladı!\nMod: {mode}\nAnlatıcı: {query.from_user.first_name}",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-
-    # Anlatıcıya özel popup gönder
-    query.answer(text=f"Kelimeniz ve ipucu gönderildi.", show_alert=True)
 
 # Butonlar
 def button(update, context):
