@@ -43,8 +43,7 @@ def start(update, context):
         groups_data[chat_id] = {"title": chat_title, "users": 0}
     text = (
         f"Merhaba! Ben Telegram Tabu Oyun Botu 😄\n"
-        f"Hoşgeldiniz {chat_title}\n Keyifli Oyunlar"
-        
+        f"Hoşgeldiniz {chat_title}\n"
         "Komutlar:\n"
         "/start → Bu mesajı gösterir\n"
         "/game → Oyunu başlatır\n"
