@@ -39,7 +39,7 @@ def pick_word():
 
 # ---------- KOMUTLAR ----------
 def start(update, context):
-    update.message.reply_text("🎮 Kelime Oyunu Botu\n/game ile başla")
+    update.message.reply_text("Anlatacgın kelimeyi yaz canımm (:")
 
 def game(update, context):
     chat_id = update.effective_chat.id
