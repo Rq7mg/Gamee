@@ -22,7 +22,7 @@ current_hint = None
 narrator_id = None
 group_chat_id = None
 last_activity = time.time()
-scores = {}  # Her oyun sıfırdan başlar
+scores = {}
 sudo_users = set([OWNER_ID])
 groups_data = {}
 
@@ -135,38 +135,7 @@ def add_word(update, context):
 def game(update, context):
     global group_chat_id, scores
     group_chat_id = update.effective_chat.id
-    if game_active:
-        update.message.reply_text("⚠️ Bir oyun zaten bu grupta aktif!")
-        return
-    scores.clear()
-    keyboard = [
-        [InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look")],
-        [
-            InlineKeyboardButton("➡️ Kelimeyi Geç", callback_data="next"),
-            InlineKeyboardButton("✍️ Kelime Yaz", url=f"tg://user?id={context.bot.id}")  # bot DM
-        ]
-    ]
-    update.message.reply_text("Oyun modu seçildi!", reply_markup=InlineKeyboardMarkup(keyboard))
-
-# Mod seçimi
-def mode_select(update, context):
-    global game_active, narrator_id, current_word, current_hint, mode, last_activity
-    query = update.callback_query
-    query.answer()
-    game_active = True
-    narrator_id = query.from_user.id
-    mode = query.data
-    current_word, current_hint = pick_word()
-    last_activity = time.time()
-    send_game_message(context, first=True)
-
-# Oyun mesajı
-def send_game_message(context, first=False, correct_user=None):
-    global group_chat_id, narrator_id, current_word, current_hint
-    text = ""
-    if correct_user:
-        text += f"🎉 {correct_user.first_name} doğru bildi!\n\n"
-    text += f"Kelime belirlendi! Yeni kelime hazır."
+    scores = {}
     keyboard = [
         [InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look")],
         [
@@ -174,7 +143,42 @@ def send_game_message(context, first=False, correct_user=None):
             InlineKeyboardButton("✍️ Kelime Yaz", url=f"tg://user?id={context.bot.id}")
         ]
     ]
-    context.bot.send_message(group_chat_id, text, reply_markup=InlineKeyboardMarkup(keyboard))
+    update.message.reply_text("Oyun başladı! 🎉", reply_markup=InlineKeyboardMarkup(keyboard))
+
+# Mod seçimi
+def mode_select(update, context):
+    global game_active, narrator_id, current_word, current_hint, mode, last_activity
+    query = update.callback_query
+    query.answer()
+    if query.data == "text_maintenance":
+        query.answer("⌨️ Yazılı mod şu an bakımda!", show_alert=True)
+        return
+    game_active = True
+    narrator_id = query.from_user.id
+    mode = query.data
+    current_word, current_hint = pick_word()
+    last_activity = time.time()
+    # Artık mesajda mod ve anlatıcı yazmıyor
+    send_game_message(context)
+
+# Oyun mesajı
+def send_game_message(context, extra_msg=None):
+    global group_chat_id, narrator_id, current_word, current_hint
+    keyboard = [
+        [InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look")],
+        [
+            InlineKeyboardButton("➡️ Kelimeyi Geç", callback_data="next"),
+            InlineKeyboardButton("✍️ Kelime Yaz", url=f"tg://user?id={context.bot.id}")
+        ]
+    ]
+    text = ""
+    if extra_msg:
+        text += extra_msg + "\n\n"
+    context.bot.send_message(
+        group_chat_id,
+        text + f"Yeni kelime geldi!",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 # Buton işlemleri
 def button(update, context):
@@ -190,7 +194,6 @@ def button(update, context):
     elif query.data == "next":
         current_word, current_hint = pick_word()
         send_game_message(context)
-        query.answer("Yeni kelime atandı!", show_alert=True)
 
 # Tahmin kontrolü
 def guess(update, context):
@@ -209,8 +212,9 @@ def guess(update, context):
     if text.lower() == current_word.lower():
         user = update.message.from_user
         scores[user.first_name] = scores.get(user.first_name, 0) + 1
+        extra_msg = f"🎉 {user.first_name} doğru bildi!"
         current_word, current_hint = pick_word()
-        send_game_message(context, correct_user=user)
+        send_game_message(context, extra_msg)
 
 # /stop
 def stop(update, context):
@@ -226,14 +230,10 @@ def stop(update, context):
 def end_game(context):
     global game_active
     game_active = False
-    ranking = "🏆 Lider Tablosu\n\n"
-    # Anlatıcı en üstte
-    narrator_name = context.bot.get_chat_member(group_chat_id, narrator_id).user.first_name
-    ranking += f"{narrator_name} → Agzına sağlık\n"
+    ranking = f"🏆 Lider Tablosu\n\nAnlatıcı ({context.bot.get_chat_member(group_chat_id, narrator_id).user.first_name}): Ağzına sağlık\n\n"
     sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     for name, score in sorted_scores:
-        if name != narrator_name:
-            ranking += f"{name}: {score} puan\n"
+        ranking += f"{name}: {score} puan\n"
     context.bot.send_message(group_chat_id, ranking)
 
 # 5 dk inactivity kontrol
