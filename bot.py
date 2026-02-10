@@ -116,7 +116,7 @@ def add_word(update, context):
         update.message.reply_text("❌ Sadece sudo kullanıcı kelime ekleyebilir.")
         return
     if len(context.args) < 1:
-        update.message.reply_text("❌ Kullanım: /addword kelime - ipucu")
+        update.message.reply_text("❌ Kullanım: /addword kelime - tanım")
         return
     text = " ".join(context.args)
     if "-" in text:
@@ -169,7 +169,8 @@ def send_game_message(context, correct_user=None):
     message_text = ""
     if correct_user:
         message_text += f"🎉 {correct_user} doğru bildi!\n\n"
-    message_text += f"Anlatıcı: {context.bot.get_chat_member(group_chat_id, narrator_id).user.first_name}"
+    # Kelime ve tanım (tanım başında emoji)
+    message_text += f"🎯 Kelime: {current_word}\n📌 Tanım: {current_hint}"
     context.bot.send_message(group_chat_id, message_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 # Buton işlemleri
@@ -177,15 +178,18 @@ def button(update, context):
     global current_word, current_hint, narrator_id, last_activity
     query = update.callback_query
     user = query.from_user
-    if user.id != narrator_id:
-        query.answer("Sadece anlatıcı görebilir.", show_alert=True)
-        return
     last_activity = time.time()
     if query.data == "look":
-        query.answer(f"Kelime: {current_word}\nİpucu: {current_hint}", show_alert=True)
+        if user.id == narrator_id:
+            query.answer(f"🎯 Kelime: {current_word}\n📌 Tanım: {current_hint}", show_alert=True)
+        else:
+            query.answer("Sadece anlatıcı görebilir.", show_alert=True)
     elif query.data == "next":
         current_word, current_hint = pick_word()
-        query.answer("Yeni kelime atandı! Kelimeye Bak kısmında (;", show_alert=True)
+        if user.id == narrator_id:
+            query.answer(f"🎯 Yeni Kelime:\n{current_word}\n📌 Tanım: {current_hint}", show_alert=True)
+        else:
+            query.answer("Sadece anlatıcı görebilir.", show_alert=True)
 
 # Tahmin kontrolü
 def guess(update, context):
@@ -224,10 +228,11 @@ def end_game(context):
     ranking = "🏆 Lider Tablosu\n\n"
     if narrator_id:
         narrator_name = context.bot.get_chat_member(group_chat_id, narrator_id).user.first_name
-        ranking += f"{narrator_name} ağzına sağlık\n"
+        ranking += f"Anlatıcı: {narrator_name}\n"
+    ranking += "Kazananlar:\n"
     sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    for name, score in sorted_scores:
-        ranking += f"{name}: {score} puan\n"
+    for i, (name, score) in enumerate(sorted_scores, 1):
+        ranking += f"{i}. {name}: {score} puan\n"
     context.bot.send_message(group_chat_id, ranking)
 
 # 5 dk inactivity kontrol
