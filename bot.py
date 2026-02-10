@@ -17,8 +17,12 @@ group_chat_id = None
 last_activity = time.time()
 
 # Kelime veritabanı
-with open("words.json", encoding="utf-8") as f:
-    WORDS = json.load(f)
+try:
+    with open("words.json", encoding="utf-8") as f:
+        WORDS = json.load(f)
+except json.JSONDecodeError as e:
+    print(f"JSON hatası: {e}")
+    WORDS = []
 
 SCORES_FILE = "scores.json"
 
@@ -34,8 +38,10 @@ def save_scores(scores):
         json.dump(scores, f)
 
 def pick_word():
+    if not WORDS:
+        return "Kelime yok", "Veritabanında kelime bulunamadı"
     w = random.choice(WORDS)
-    return w["word"], w["hint"]
+    return w.get("word", "Bilinmeyen"), w.get("hint", "İpucu yok")
 
 # /start komutu
 def start(update, context):
@@ -112,7 +118,7 @@ def button(update, context):
         query.answer(f"Kelime: {current_word}\nİpucu: {current_hint}", show_alert=True)
     elif query.data == "next":
         current_word, current_hint = pick_word()
-        query.answer(f"Yeni kelime:\n{current_word}\nİpucu: {current_hint}", show_alert=True)
+        query.answer(f"Yeni kelime hazır! İpucu: {current_hint}", show_alert=True)
     elif query.data == "write":
         try:
             context.bot.send_message(narrator_id, "✍️ Yeni kelimeyi yazın. Bu kelime artık oyun kelimesi olacak.")
@@ -175,17 +181,27 @@ def end_game(context):
     sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     for name, score in sorted_scores:
         ranking += f"{name}: {score} puan\n"
-    context.bot.send_message(group_chat_id, ranking)
+    try:
+        context.bot.send_message(group_chat_id, ranking)
+    except:
+        print("Oyun bitirme mesajı gönderilemedi. Chat ID hatası olabilir.")
 
 # 5 dk inactivity kontrol
 def timer_check(context):
     global game_active
     if game_active and time.time() - last_activity > 300:
-        context.bot.send_message(group_chat_id, "⏱ 5 dk işlem yok. Oyun bitti.")
+        try:
+            context.bot.send_message(group_chat_id, "⏱ 5 dk işlem yok. Oyun bitti.")
+        except:
+            print("Inactivity mesajı gönderilemedi. Chat ID hatası olabilir.")
         end_game(context)
 
 # Main
 def main():
+    if not TOKEN:
+        print("BOT_TOKEN ortam değişkeni eksik!")
+        return
+
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
 
@@ -201,4 +217,5 @@ def main():
     updater.start_polling()
     updater.idle()
 
-main()
+if __name__ == "__main__":
+    main()
