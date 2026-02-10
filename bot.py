@@ -38,8 +38,10 @@ def pick_word():
 def track_group(update):
     chat_id = update.effective_chat.id
     chat_title = update.effective_chat.title or update.effective_chat.username or "Özel Chat"
-    if chat_id not in groups_data:
-        groups_data[chat_id] = {"title": chat_title, "users": update.effective_chat.get_members_count() if hasattr(update.effective_chat, "get_members_count") else 0}
+    groups_data[chat_id] = {
+        "title": chat_title,
+        "users": update.effective_chat.get_member_count() if hasattr(update.effective_chat, "get_member_count") else 0
+    }
 
 # /start
 def start(update, context):
@@ -47,10 +49,8 @@ def start(update, context):
     text = (
         "Merhaba! Telegram Tabu Oyun Botu 😄\n"
         "Komutlar:\n"
-        "/stats → Gruplar ve kullanıcı sayısı (Sahip)\n"
         "/game → Oyunu başlatır\n"
         "/stop → Oyunu durdurur (admin)\n"
-        "/ping → Bot performans bilgisi (Sahip)\n"
     )
     keyboard = [
         [
@@ -210,7 +210,6 @@ def guess(update, context):
         user = update.message.from_user
         scores[user.first_name] = scores.get(user.first_name, 0) + 1
         update.message.reply_text(f"🎉 {user.first_name} doğru bildi!")
-        # Yeni kelimeyi grup mesajında göster
         current_word, current_hint = pick_word()
         send_game_message(context)
 
