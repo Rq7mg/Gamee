@@ -145,7 +145,7 @@ def mode_select(update, context):
         "current_hint": current_hint,
         "last_activity": time.time(),
         "scores": {},
-        "last_message_id": None  # Yeni mesaj id için
+        "last_messages": []  # Son 2 mesaj id için liste
     }
     send_game_message(context, chat_id)
 
@@ -163,15 +163,19 @@ def send_game_message(context, chat_id, prefix_msg=""):
         ]
     ]
 
-    if game["last_message_id"]:
+    # Son 2 mesajı sil
+    for msg_id in game["last_messages"][-2:]:
         try:
-            context.bot.delete_message(chat_id, game["last_message_id"])
+            context.bot.delete_message(chat_id, msg_id)
         except:
             pass
 
     msg = f"{prefix_msg}\nAnlatıcı: {context.bot.get_chat_member(chat_id, narrator_id).user.first_name}"
     message = context.bot.send_message(chat_id, msg, reply_markup=InlineKeyboardMarkup(keyboard))
-    game["last_message_id"] = message.message_id
+
+    game["last_messages"].append(message.message_id)
+    # Son 2 mesajı sakla
+    game["last_messages"] = game["last_messages"][-2:]
 
 def button(update, context):
     query = update.callback_query
@@ -216,7 +220,7 @@ def guess(update, context):
         user = update.message.from_user
         user_key = f"{user.first_name}[{user.id}]"
         game["scores"][user_key] = game["scores"].get(user_key, 0) + 1
-        prefix_msg = f"🎉 {user.first_name} doğru bildi!"
+        prefix_msg = f"🎉 {user.first_name} '{game['current_word']}' kelimesini doğru bildi!"
         game["current_word"], game["current_hint"] = pick_word()
         send_game_message(context, chat_id, prefix_msg=prefix_msg)
         context.bot.send_message(
