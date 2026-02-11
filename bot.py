@@ -154,12 +154,19 @@ def mode_select(update, context):
 
     send_game_message(context, chat_id)
 
-def send_game_message(context, chat_id):
+def send_game_message(context, chat_id, top_message=None):
+    """Oyun ekranı gönderimi, üstte tebrik mesaj opsiyonel"""
     game = games[chat_id]
     narrator_id = game["narrator_id"]
     bot_username = context.bot.username
-
     dm_link = f"https://t.me/{bot_username}?start=writeword_{chat_id}"
+
+    # Tebrik ve yeni kelime butonları
+    text = ""
+    if top_message:
+        text += f"{top_message}\n\n"
+
+    text += f"Anlatıcı: {context.bot.get_chat_member(chat_id, narrator_id).user.first_name}"
 
     keyboard = [
         [InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look")],
@@ -171,7 +178,7 @@ def send_game_message(context, chat_id):
 
     context.bot.send_message(
         chat_id,
-        f"Anlatıcı: {context.bot.get_chat_member(chat_id, narrator_id).user.first_name}",
+        text,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -194,7 +201,6 @@ def button(update, context):
             f"🎯 Kelime: {game['current_word']}\n\n📌 Tanım: {game['current_hint']}",
             show_alert=True
         )
-
     elif query.data == "next":
         game["current_word"], game["current_hint"] = pick_word()
         query.answer(
@@ -227,13 +233,18 @@ def guess(update, context):
         user_key = f"{user.first_name}[{user.id}]"
         game["scores"][user_key] = game["scores"].get(user_key, 0) + 1
 
-        context.bot.send_message(chat_id, f"🎉 {user.first_name} doğru bildi!")
-
+        top_message = f"🎉 {user.first_name} doğru bildi!"
+        # Yeni kelime seç
         game["current_word"], game["current_hint"] = pick_word()
+
+        # Anlatıcıya pop-up olarak yeni kelime göster
         context.bot.send_message(
             game["narrator_id"],
             f"🎯 Yeni kelime:\n{game['current_word']}\n📌 Tanım: {game['current_hint']}"
         )
+
+        # Grup için tebrik + yeni 3 butonlu ekran
+        send_game_message(context, chat_id, top_message=top_message)
 
 def stop(update, context):
     chat_id = update.effective_chat.id
