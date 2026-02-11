@@ -131,7 +131,8 @@ def mode_select(update, context):
         "current_word": current_word,
         "current_hint": current_hint,
         "last_activity": time.time(),
-        "scores": {}
+        "scores": {},
+        "awaiting_new_word": False
     }
     send_game_message(context, chat_id)
 
@@ -143,7 +144,7 @@ def send_game_message(context, chat_id):
     keyboard = [
         [InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look")],
         [InlineKeyboardButton("➡️ Kelimeyi Değiştir", callback_data="next"),
-         InlineKeyboardButton("✍️ Kelime Yaz", url=f"https://t.me/{context.bot.username}")]
+         InlineKeyboardButton("✍️ Kelime Yaz", callback_data="write_word")]
     ]
     context.bot.send_message(chat_id,
                              f"Anlatıcı: {context.bot.get_chat_member(chat_id, narrator_id).user.first_name}",
@@ -168,6 +169,9 @@ def button(update, context):
     elif query.data == "next":
         game["current_word"], game["current_hint"] = pick_word()
         query.answer(f"🎯 Yeni kelime:\n{game['current_word']}\n📌 Tanım: {game['current_hint']}", show_alert=True)
+    elif query.data == "write_word":
+        game["awaiting_new_word"] = True
+        query.answer("✍️ Lütfen özelden yeni kelimenizi yazın.", show_alert=True)
 
 # Tahmin kontrolü
 def guess(update, context):
@@ -180,11 +184,15 @@ def guess(update, context):
     game["last_activity"] = time.time()
 
     # DM üzerinden kelime yazma
-    if update.message.chat.type == "private" and update.message.from_user.id == game["narrator_id"]:
-        game["current_word"] = text
-        game["current_hint"] = "Kullanıcı tarafından girildi"
-        context.bot.send_message(game["narrator_id"], f"🎯 Yeni kelime: {game['current_word']}\n📌 Tanım: {game['current_hint']}")
-        return
+    if update.message.chat.type == "private" and update.message.from_user.id in [g["narrator_id"] for g in games.values()]:
+        for g_chat_id, g in games.items():
+            if g["narrator_id"] == update.message.from_user.id and g.get("awaiting_new_word", False):
+                g["current_word"] = text
+                g["current_hint"] = "Kullanıcı tarafından girildi"
+                g["awaiting_new_word"] = False
+                context.bot.send_message(update.message.from_user.id, f"✅ Yeni kelime alındı. Anlatacağınız kelime: {text}")
+                send_game_message(context, g_chat_id)
+                return
 
     # Grup tahmini (kısmi eşleşme)
     if game["current_word"].lower() in text.lower():
@@ -273,7 +281,7 @@ def main():
     dp.add_handler(CommandHandler("addword", add_word))
     dp.add_handler(CommandHandler("eniyiler", eniyiler))
     dp.add_handler(CallbackQueryHandler(mode_select, pattern="voice|text_maintenance"))
-    dp.add_handler(CallbackQueryHandler(button, pattern="look|next"))
+    dp.add_handler(CallbackQueryHandler(button, pattern="look|next|write_word"))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, guess))
 
     updater.job_queue.run_repeating(timer_check, interval=10)
