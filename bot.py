@@ -95,7 +95,6 @@ def add_word(update, context):
         word, hint = text.strip(), ""
 
     word_lower = word.lower()
-
     if words_col.find_one({"word": word_lower}):
         update.message.reply_text("❌ Bu kelime zaten var.")
         return
@@ -110,7 +109,6 @@ def del_word(update, context):
 
     word_lower = context.args[0].lower()
     result = words_col.delete_one({"word": word_lower})
-
     if result.deleted_count:
         update.message.reply_text(f"✅ Kelime silindi: {word_lower}")
     else:
@@ -145,7 +143,7 @@ def mode_select(update, context):
         "current_hint": current_hint,
         "last_activity": time.time(),
         "scores": {},
-        "last_messages": []  # Son 2 mesaj id için liste
+        "last_messages": []  # Son mesajları tut
     }
     send_game_message(context, chat_id)
 
@@ -163,19 +161,28 @@ def send_game_message(context, chat_id, prefix_msg=""):
         ]
     ]
 
-    # Son 2 mesajı sil
-    for msg_id in game["last_messages"][-2:]:
+    # Mesaj silme işlemi geriden
+    while len(game["last_messages"]) >= 2:
+        old_msg_id = game["last_messages"].pop(0)  # en eskiyi sil
         try:
-            context.bot.delete_message(chat_id, msg_id)
+            context.bot.delete_message(chat_id, old_msg_id)
         except:
             pass
 
+    # Kalın ve koyu kelime için MarkdownV2
+    if prefix_msg:
+        safe_word = game['current_word'].replace("_","\\_").replace("*","\\*").replace("[","\\[").replace("]","\\]").replace("(","\\(").replace(")","\\)").replace("`","\\`")
+        prefix_msg = prefix_msg.replace(game['current_word'], f"*{safe_word}*")
+
     msg = f"{prefix_msg}\nAnlatıcı: {context.bot.get_chat_member(chat_id, narrator_id).user.first_name}"
-    message = context.bot.send_message(chat_id, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+    message = context.bot.send_message(
+        chat_id,
+        msg,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
 
     game["last_messages"].append(message.message_id)
-    # Son 2 mesajı sakla
-    game["last_messages"] = game["last_messages"][-2:]
 
 def button(update, context):
     query = update.callback_query
@@ -223,6 +230,7 @@ def guess(update, context):
         prefix_msg = f"🎉 {user.first_name} '{game['current_word']}' kelimesini doğru bildi!"
         game["current_word"], game["current_hint"] = pick_word()
         send_game_message(context, chat_id, prefix_msg=prefix_msg)
+        # Anlatıcıya yeni kelime
         context.bot.send_message(
             game["narrator_id"],
             f"🎯 Yeni kelime:\n{game['current_word']}\n📌 Tanım: {game['current_hint']}"
