@@ -137,7 +137,8 @@ def mode_select(update, context):
         "current_hint": current_hint,
         "last_activity": time.time(),
         "scores": {},
-        "last_messages": []  # Son mesaj idleri
+        "last_messages": [],
+        "correct_count": 0
     }
     send_game_message(context, chat_id)
 
@@ -148,20 +149,17 @@ def send_game_message(context, chat_id, prefix_msg=""):
     dm_link = f"https://t.me/{bot_username}?start=writeword_{chat_id}"
     keyboard = [
         [InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look")],
-        [
-            InlineKeyboardButton("➡️ Kelimeyi Değiştir", callback_data="next"),
-            InlineKeyboardButton("✍️ Kelime Yaz", url=dm_link)
-        ]
+        [InlineKeyboardButton("➡️ Kelimeyi Değiştir", callback_data="next"),
+         InlineKeyboardButton("✍️ Kelime Yaz", url=dm_link)]
     ]
-    # Sadece eski 2 mesaj silinir
-    for msg_id in game["last_messages"][-2:]:
-        try:
-            context.bot.delete_message(chat_id, msg_id)
-        except:
-            pass
-    # Mesaj formatı: kelimeyi kalın yap
+    # 2. doğru cevaptan sonra mesaj silme
+    if game["correct_count"] >= 2:
+        for msg_id in game["last_messages"][:2]:
+            try:
+                context.bot.delete_message(chat_id, msg_id)
+            except:
+                pass
     if prefix_msg:
-        # MarkdownV2 için kelimeyi kalın yap
         word_bold = f"*{game['current_word']}*"
         prefix_msg = prefix_msg.replace(f"'{game['current_word']}'", f"'{word_bold}'")
         msg = f"{prefix_msg}\nAnlatıcı: {context.bot.get_chat_member(chat_id, narrator_id).user.first_name}"
@@ -171,7 +169,7 @@ def send_game_message(context, chat_id, prefix_msg=""):
         chat_id, msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.MARKDOWN
     )
     game["last_messages"].append(message.message_id)
-    game["last_messages"] = game["last_messages"][-2:]
+    game["last_messages"] = game["last_messages"][-5:]
 
 def button(update, context):
     query = update.callback_query
@@ -186,11 +184,10 @@ def button(update, context):
     game["last_activity"] = time.time()
     if query.data == "look":
         query.answer(
-            f"🎯 Kelime: {game['current_word']}\n\n📌 Tanım: {game['current_hint']}",
+            f"🎯 Kelime: {game['current_word']}\n📌 Tanım: {game['current_hint']}",
             show_alert=True
         )
     elif query.data == "next":
-        # Sadece kelime değişir, grup mesajı tekrar gelmez
         game["current_word"], game["current_hint"] = pick_word()
         query.answer(
             f"🎯 Yeni kelime: {game['current_word']}\n📌 Tanım: {game['current_hint']}",
@@ -218,9 +215,16 @@ def guess(update, context):
         user = update.message.from_user
         user_key = f"{user.first_name}[{user.id}]"
         game["scores"][user_key] = game["scores"].get(user_key, 0) + 1
-        # Doğru kelime bildirimi ve kalın
+        game["correct_count"] += 1
+        # MongoDB güncelle
+        scores_col.update_one(
+            {"user_id": user.id},
+            {"$inc": {"score": 1}, "$set": {"name": user.first_name}},
+            upsert=True
+        )
+        # Bildirim mesajı
         prefix_msg = f"🎉 {user.first_name} '*{game['current_word']}*' kelimesini doğru bildi!"
-        # Yeni kelimeyi gruba gönder
+        # Yeni kelime
         game["current_word"], game["current_hint"] = pick_word()
         send_game_message(context, chat_id, prefix_msg=prefix_msg)
         # Anlatıcıya popup
