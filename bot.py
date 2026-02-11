@@ -1,7 +1,7 @@
 import os
 import random
 import time
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 import pymongo
 
@@ -87,18 +87,15 @@ def add_word(update, context):
     if update.message.from_user.id not in sudo_users:
         update.message.reply_text("❌ Sadece sudo kullanıcı kelime ekleyebilir.")
         return
-
     text = " ".join(context.args)
     if "-" in text:
         word, hint = map(str.strip, text.split("-", 1))
     else:
         word, hint = text.strip(), ""
-
     word_lower = word.lower()
     if words_col.find_one({"word": word_lower}):
         update.message.reply_text("❌ Bu kelime zaten var.")
         return
-
     words_col.insert_one({"word": word_lower, "hint": hint})
     update.message.reply_text(f"✅ Kelime eklendi: {word} - {hint}")
 
@@ -106,7 +103,6 @@ def del_word(update, context):
     if update.message.from_user.id not in sudo_users:
         update.message.reply_text("❌ Sadece sudo kullanıcı kelime silebilir.")
         return
-
     word_lower = context.args[0].lower()
     result = words_col.delete_one({"word": word_lower})
     if result.deleted_count:
@@ -119,7 +115,6 @@ def game(update, context):
     if chat_id in games and games[chat_id]["active"]:
         update.message.reply_text("❌ Bu grupta oyun zaten devam ediyor!")
         return
-
     keyboard = [
         [InlineKeyboardButton("🎤 Sesli", callback_data="voice")],
         [InlineKeyboardButton("⌨️ Yazılı (Bakımda)", callback_data="text_maintenance")]
@@ -133,7 +128,6 @@ def mode_select(update, context):
     if query.data == "text_maintenance":
         query.answer("⌨️ Yazılı mod şu an bakımda!", show_alert=True)
         return
-
     current_word, current_hint = pick_word()
     games[chat_id] = {
         "active": True,
@@ -143,7 +137,7 @@ def mode_select(update, context):
         "current_hint": current_hint,
         "last_activity": time.time(),
         "scores": {},
-        "last_messages": []  # Son mesajları tut
+        "last_messages": []  # Son mesaj idleri
     }
     send_game_message(context, chat_id)
 
@@ -152,7 +146,6 @@ def send_game_message(context, chat_id, prefix_msg=""):
     narrator_id = game["narrator_id"]
     bot_username = context.bot.username
     dm_link = f"https://t.me/{bot_username}?start=writeword_{chat_id}"
-
     keyboard = [
         [InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look")],
         [
@@ -160,29 +153,25 @@ def send_game_message(context, chat_id, prefix_msg=""):
             InlineKeyboardButton("✍️ Kelime Yaz", url=dm_link)
         ]
     ]
-
-    # Mesaj silme işlemi geriden
-    while len(game["last_messages"]) >= 2:
-        old_msg_id = game["last_messages"].pop(0)  # en eskiyi sil
+    # Sadece eski 2 mesaj silinir
+    for msg_id in game["last_messages"][-2:]:
         try:
-            context.bot.delete_message(chat_id, old_msg_id)
+            context.bot.delete_message(chat_id, msg_id)
         except:
             pass
-
-    # Kalın ve koyu kelime için MarkdownV2
+    # Mesaj formatı: kelimeyi kalın yap
     if prefix_msg:
-        safe_word = game['current_word'].replace("_","\\_").replace("*","\\*").replace("[","\\[").replace("]","\\]").replace("(","\\(").replace(")","\\)").replace("`","\\`")
-        prefix_msg = prefix_msg.replace(game['current_word'], f"*{safe_word}*")
-
-    msg = f"{prefix_msg}\nAnlatıcı: {context.bot.get_chat_member(chat_id, narrator_id).user.first_name}"
+        # MarkdownV2 için kelimeyi kalın yap
+        word_bold = f"*{game['current_word']}*"
+        prefix_msg = prefix_msg.replace(f"'{game['current_word']}'", f"'{word_bold}'")
+        msg = f"{prefix_msg}\nAnlatıcı: {context.bot.get_chat_member(chat_id, narrator_id).user.first_name}"
+    else:
+        msg = f"Anlatıcı: {context.bot.get_chat_member(chat_id, narrator_id).user.first_name}"
     message = context.bot.send_message(
-        chat_id,
-        msg,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
+        chat_id, msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.MARKDOWN
     )
-
     game["last_messages"].append(message.message_id)
+    game["last_messages"] = game["last_messages"][-2:]
 
 def button(update, context):
     query = update.callback_query
@@ -201,8 +190,12 @@ def button(update, context):
             show_alert=True
         )
     elif query.data == "next":
+        # Sadece kelime değişir, grup mesajı tekrar gelmez
         game["current_word"], game["current_hint"] = pick_word()
-        send_game_message(context, chat_id)
+        query.answer(
+            f"🎯 Yeni kelime: {game['current_word']}\n📌 Tanım: {game['current_hint']}",
+            show_alert=True
+        )
 
 def guess(update, context):
     chat_id = update.message.chat.id
@@ -218,19 +211,19 @@ def guess(update, context):
                 context.bot.send_message(user_id, f"🎯 Yeni anlatacağınız kelime: {text}")
             pending_dm.pop(user_id, None)
         return
-
     game = games.get(chat_id)
     if not game or not game["active"]:
         return
-
     if game["current_word"].lower() in text.lower() and user_id != game["narrator_id"]:
         user = update.message.from_user
         user_key = f"{user.first_name}[{user.id}]"
         game["scores"][user_key] = game["scores"].get(user_key, 0) + 1
-        prefix_msg = f"🎉 {user.first_name} '{game['current_word']}' kelimesini doğru bildi!"
+        # Doğru kelime bildirimi ve kalın
+        prefix_msg = f"🎉 {user.first_name} '*{game['current_word']}*' kelimesini doğru bildi!"
+        # Yeni kelimeyi gruba gönder
         game["current_word"], game["current_hint"] = pick_word()
         send_game_message(context, chat_id, prefix_msg=prefix_msg)
-        # Anlatıcıya yeni kelime
+        # Anlatıcıya popup
         context.bot.send_message(
             game["narrator_id"],
             f"🎯 Yeni kelime:\n{game['current_word']}\n📌 Tanım: {game['current_hint']}"
