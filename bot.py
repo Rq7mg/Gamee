@@ -50,7 +50,7 @@ def start(update, context):
         "Komutlar:\n"
         "/game → Oyunu başlatır\n"
         "/stop → Oyunu durdurur (admin)\n"
-        "/eniyiler → Global en iyileri gösterir
+        "/eniyiler → Global en iyileri gösterir"
     )
     keyboard = [
         [InlineKeyboardButton("Beni Gruba Ekle", url=f"https://t.me/{context.bot.username}?startgroup=true")],
