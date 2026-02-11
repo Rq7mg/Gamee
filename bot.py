@@ -54,12 +54,8 @@ def start(update, context):
     )
     keyboard = [
         [InlineKeyboardButton("Beni Gruba Ekle", url=f"https://t.me/{context.bot.username}?startgroup=true")],
-        [
-            InlineKeyboardButton("👑 Sahip", url=f"tg://user?id={OWNER_ID}"),
-            InlineKeyboardButton("💬 Destek", url="https://t.me/kiyiciupdate")
-        ]
-    ]
-    update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        [InlineKeyboardButton("👑 Sahip", url=f"tg://user?id={OWNER_ID}"),
+         InlineKeyboardButton("💬 Destek", url="https://t.me/kiyiciupdate")]
     ]
     update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
