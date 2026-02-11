@@ -35,7 +35,6 @@ def track_group(update):
 
 def start(update, context):
     track_group(update)
-
     if context.args:
         arg = context.args[0]
         if arg.startswith("writeword_"):
@@ -119,7 +118,6 @@ def del_word(update, context):
 
 def game(update, context):
     chat_id = update.effective_chat.id
-
     if chat_id in games and games[chat_id]["active"]:
         update.message.reply_text("❌ Bu grupta oyun zaten devam ediyor!")
         return
@@ -128,20 +126,17 @@ def game(update, context):
         [InlineKeyboardButton("🎤 Sesli", callback_data="voice")],
         [InlineKeyboardButton("⌨️ Yazılı (Bakımda)", callback_data="text_maintenance")]
     ]
-
     update.message.reply_text("Oyun modu seç:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 def mode_select(update, context):
     query = update.callback_query
     query.answer()
     chat_id = query.message.chat.id
-
     if query.data == "text_maintenance":
         query.answer("⌨️ Yazılı mod şu an bakımda!", show_alert=True)
         return
 
     current_word, current_hint = pick_word()
-
     games[chat_id] = {
         "active": True,
         "mode": query.data,
@@ -149,24 +144,16 @@ def mode_select(update, context):
         "current_word": current_word,
         "current_hint": current_hint,
         "last_activity": time.time(),
-        "scores": {}
+        "scores": {},
+        "last_message_id": None  # Yeni mesaj id için
     }
-
     send_game_message(context, chat_id)
 
-def send_game_message(context, chat_id, top_message=None):
-    """Oyun ekranı gönderimi, üstte tebrik mesaj opsiyonel"""
+def send_game_message(context, chat_id, prefix_msg=""):
     game = games[chat_id]
     narrator_id = game["narrator_id"]
     bot_username = context.bot.username
     dm_link = f"https://t.me/{bot_username}?start=writeword_{chat_id}"
-
-    # Tebrik ve yeni kelime butonları
-    text = ""
-    if top_message:
-        text += f"{top_message}\n\n"
-
-    text += f"Anlatıcı: {context.bot.get_chat_member(chat_id, narrator_id).user.first_name}"
 
     keyboard = [
         [InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look")],
@@ -176,11 +163,15 @@ def send_game_message(context, chat_id, top_message=None):
         ]
     ]
 
-    context.bot.send_message(
-        chat_id,
-        text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    if game["last_message_id"]:
+        try:
+            context.bot.delete_message(chat_id, game["last_message_id"])
+        except:
+            pass
+
+    msg = f"{prefix_msg}\nAnlatıcı: {context.bot.get_chat_member(chat_id, narrator_id).user.first_name}"
+    message = context.bot.send_message(chat_id, msg, reply_markup=InlineKeyboardMarkup(keyboard))
+    game["last_message_id"] = message.message_id
 
 def button(update, context):
     query = update.callback_query
@@ -188,14 +179,11 @@ def button(update, context):
     game = games.get(chat_id)
     if not game:
         return
-
     user = query.from_user
     if user.id != game["narrator_id"]:
         query.answer("Sadece anlatıcı görebilir.", show_alert=True)
         return
-
     game["last_activity"] = time.time()
-
     if query.data == "look":
         query.answer(
             f"🎯 Kelime: {game['current_word']}\n\n📌 Tanım: {game['current_hint']}",
@@ -203,16 +191,12 @@ def button(update, context):
         )
     elif query.data == "next":
         game["current_word"], game["current_hint"] = pick_word()
-        query.answer(
-            f"🎯 Yeni kelime: {game['current_word']}\n\n📌 Tanım: {game['current_hint']}",
-            show_alert=True
-        )
+        send_game_message(context, chat_id)
 
 def guess(update, context):
     chat_id = update.message.chat.id
     user_id = update.message.from_user.id
     text = update.message.text.strip()
-
     if update.message.chat.type == "private":
         if user_id in pending_dm:
             target_chat = pending_dm[user_id]
@@ -232,19 +216,13 @@ def guess(update, context):
         user = update.message.from_user
         user_key = f"{user.first_name}[{user.id}]"
         game["scores"][user_key] = game["scores"].get(user_key, 0) + 1
-
-        top_message = f"🎉 {user.first_name} doğru bildi!"
-        # Yeni kelime seç
+        prefix_msg = f"🎉 {user.first_name} doğru bildi!"
         game["current_word"], game["current_hint"] = pick_word()
-
-        # Anlatıcıya pop-up olarak yeni kelime göster
+        send_game_message(context, chat_id, prefix_msg=prefix_msg)
         context.bot.send_message(
             game["narrator_id"],
             f"🎯 Yeni kelime:\n{game['current_word']}\n📌 Tanım: {game['current_hint']}"
         )
-
-        # Grup için tebrik + yeni 3 butonlu ekran
-        send_game_message(context, chat_id, top_message=top_message)
 
 def stop(update, context):
     chat_id = update.effective_chat.id
@@ -252,31 +230,24 @@ def stop(update, context):
     if not game:
         update.message.reply_text("❌ Bu grupta oyun yok.")
         return
-
     admins = context.bot.get_chat_administrators(chat_id)
     admin_ids = [a.user.id for a in admins]
-
     if update.message.from_user.id not in admin_ids:
         update.message.reply_text("Sadece admin durdurabilir.")
         return
-
     end_game(context, chat_id)
 
 def end_game(context, chat_id):
     game = games.get(chat_id)
     if not game:
         return
-
     ranking = "🏆 Lider Tablosu\n\n"
     narrator_name = context.bot.get_chat_member(chat_id, game["narrator_id"]).user.first_name
     ranking += f"Anlatıcı: {narrator_name}\nKazananlar:\n"
-
     sorted_scores = sorted(game["scores"].items(), key=lambda x: x[1], reverse=True)
-
     for idx, (name, score) in enumerate(sorted_scores, 1):
         medal = ["🥇","🥈","🥉"] + ["🏅"]*7
         ranking += f"{medal[idx-1]} {idx}. {name}: {score} puan\n"
-
     context.bot.send_message(chat_id, ranking)
     game["active"] = False
 
