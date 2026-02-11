@@ -48,7 +48,8 @@ def start(update, context):
         "Komutlar:\n"
         "/game → Oyunu başlatır\n"
         "/stop → Oyunu durdurur (admin)\n"
-        "/eniyiler → Global en iyileri gösterir"
+        "/eniyiler → Global en iyileri gösterir\n"
+        "/wordcount → Toplam kelime sayısını gösterir"
     )
 
     keyboard = [
@@ -109,6 +110,10 @@ def del_word(update, context):
         update.message.reply_text(f"✅ Kelime silindi: {word_lower}")
     else:
         update.message.reply_text("❌ Kelime bulunamadı.")
+
+def wordcount(update, context):
+    count = words_col.count_documents({})
+    update.message.reply_text(f"📚 Toplam kelime sayısı: {count}")
 
 def game(update, context):
     chat_id = update.effective_chat.id
@@ -286,6 +291,7 @@ def main():
     dp.add_handler(CommandHandler("addword", add_word))
     dp.add_handler(CommandHandler("delword", del_word))
     dp.add_handler(CommandHandler("eniyiler", eniyiler))
+    dp.add_handler(CommandHandler("wordcount", wordcount))  # 🆕 eklendi
 
     dp.add_handler(CallbackQueryHandler(mode_select, pattern="voice|text_maintenance"))
     dp.add_handler(CallbackQueryHandler(button, pattern="look|next"))
