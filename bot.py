@@ -121,7 +121,7 @@ def game(update, context):
         return
     keyboard = [
         [InlineKeyboardButton("🎤 Sesli", callback_data="voice")],
-        [InlineKeyboardButton("⌨️ Yazılı (Bakımda)", callback_data="text_maintenance")]
+        [InlineKeyboardButton("⌨️ Yazılı", callback_data="text_active")]
     ]
     update.message.reply_text("Oyun modu seç:", reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -130,30 +130,72 @@ def mode_select(update, context):
     query.answer()
     chat_id = query.message.chat.id
 
-    # AKTİF OYUN KONTROLÜ (FIX)
     if chat_id in games and games[chat_id]["active"]:
         query.answer("❌ Bu grupta zaten aktif bir oyun var!", show_alert=True)
         return
 
-    if query.data == "text_maintenance":
-        query.answer("⌨️ Yazılı mod şu an bakımda!", show_alert=True)
+    if query.data == "text_active":
+        # Yeni seçim ekranı
+        keyboard = [
+            [InlineKeyboardButton("📌 Sabit Anlatıcı", callback_data="static_narrator")],
+            [InlineKeyboardButton("🔄 Değişken Anlatıcı", callback_data="dynamic_narrator")]
+        ]
+        query.edit_message_text("Yazılı mod: Seçenek belirleyin", reply_markup=InlineKeyboardMarkup(keyboard))
         return
 
+    if query.data == "voice":
+        current_word, current_hint = pick_word()
+        games[chat_id] = {
+            "active": True,
+            "mode": "voice",
+            "narrator_id": query.from_user.id,
+            "current_word": current_word,
+            "current_hint": current_hint,
+            "last_activity": time.time(),
+            "scores": {},
+            "last_messages": [],
+            "correct_count": 0,
+            "dynamic_mode": False,
+            "opt_out_users": set()
+        }
+        send_game_message(context, chat_id)
+
+def narrator_type(update, context):
+    query = update.callback_query
+    chat_id = query.message.chat.id
+    user = query.from_user
+    query.answer()
     current_word, current_hint = pick_word()
-
-    games[chat_id] = {
-        "active": True,
-        "mode": query.data,
-        "narrator_id": query.from_user.id,
-        "current_word": current_word,
-        "current_hint": current_hint,
-        "last_activity": time.time(),
-        "scores": {},
-        "last_messages": [],
-        "correct_count": 0
-    }
-
-    send_game_message(context, chat_id)
+    if query.data == "static_narrator":
+        games[chat_id] = {
+            "active": True,
+            "mode": "text",
+            "narrator_id": OWNER_ID,  # Sabit anlatıcı
+            "current_word": current_word,
+            "current_hint": current_hint,
+            "last_activity": time.time(),
+            "scores": {},
+            "last_messages": [],
+            "correct_count": 0,
+            "dynamic_mode": False,
+            "opt_out_users": set()
+        }
+        send_game_message(context, chat_id)
+    elif query.data == "dynamic_narrator":
+        games[chat_id] = {
+            "active": True,
+            "mode": "text",
+            "narrator_id": user.id,  # İlk anlatıcı oyunu başlatan kişi
+            "current_word": current_word,
+            "current_hint": current_hint,
+            "last_activity": time.time(),
+            "scores": {},
+            "last_messages": [],
+            "correct_count": 0,
+            "dynamic_mode": True,
+            "opt_out_users": set()
+        }
+        send_game_message(context, chat_id)
 
 def send_game_message(context, chat_id, prefix_msg=""):
     game = games[chat_id]
@@ -167,6 +209,16 @@ def send_game_message(context, chat_id, prefix_msg=""):
          InlineKeyboardButton("✍️ Kelime Yaz", url=dm_link)]
     ]
 
+    if game.get("dynamic_mode"):
+        # Dinamik mod için ekstra anlatıcı butonu
+        if game.get("dynamic_mode") and game.get("opt_out_users"):
+            if narrator_id in game["opt_out_users"]:
+                keyboard.append([InlineKeyboardButton("🎤 Anlatıcı Olmak İstiyorum", callback_data="be_narrator")])
+            else:
+                keyboard.append([InlineKeyboardButton("🚫 Anlatıcı Olmak İstemiyorum", callback_data="opt_out_narrator")])
+        else:
+            keyboard.append([InlineKeyboardButton("🚫 Anlatıcı Olmak İstemiyorum", callback_data="opt_out_narrator")])
+
     if game["correct_count"] >= 2:
         for msg_id in game["last_messages"][:2]:
             try:
@@ -174,7 +226,7 @@ def send_game_message(context, chat_id, prefix_msg=""):
             except:
                 pass
 
-    narrator_name = context.bot.get_chat_member(chat_id, narrator_id).user.first_name
+    narrator_name = context.bot.get_chat_member(chat_id, narrator_id).user.first_name if narrator_id else "Anlatıcı"
     msg = f"{prefix_msg}\nAnlatıcı: {narrator_name}" if prefix_msg else f"Anlatıcı: {narrator_name}"
 
     message = context.bot.send_message(
@@ -189,28 +241,32 @@ def send_game_message(context, chat_id, prefix_msg=""):
 def button(update, context):
     query = update.callback_query
     chat_id = query.message.chat.id
+    user = query.from_user
     game = games.get(chat_id)
     if not game:
-        return
-
-    if query.from_user.id != game["narrator_id"]:
-        query.answer("Sadece anlatıcı görebilir.", show_alert=True)
         return
 
     game["last_activity"] = time.time()
 
     if query.data == "look":
-        query.answer(
-            f"🎯 Kelime: {game['current_word']}\n📌 Tanım: {game['current_hint']}",
-            show_alert=True
-        )
+        query.answer(f"🎯 Kelime: {game['current_word']}\n📌 Tanım: {game['current_hint']}", show_alert=True)
 
     elif query.data == "next":
         game["current_word"], game["current_hint"] = pick_word()
-        query.answer(
-            f"🎯 Yeni kelime: {game['current_word']}\n📌 Tanım: {game['current_hint']}",
-            show_alert=True
-        )
+        query.answer(f"🎯 Yeni kelime: {game['current_word']}\n📌 Tanım: {game['current_hint']}", show_alert=True)
+
+    elif query.data == "opt_out_narrator":
+        if game.get("dynamic_mode"):
+            game.setdefault("opt_out_users", set()).add(user.id)
+            query.answer("🚫 Anlatıcı olmayı devre dışı bıraktınız", show_alert=True)
+            send_game_message(context, chat_id)
+
+    elif query.data == "be_narrator":
+        if game.get("dynamic_mode") and user.id in game.get("opt_out_users", set()):
+            game["opt_out_users"].remove(user.id)
+            game["narrator_id"] = user.id
+            query.answer("🎤 Artık anlatıcı sizsiniz!", show_alert=True)
+            send_game_message(context, chat_id)
 
 def guess(update, context):
     chat_id = update.message.chat.id
@@ -253,6 +309,12 @@ def guess(update, context):
             f"🎯 Yeni kelime:\n{game['current_word']}\n📌 Tanım: {game['current_hint']}"
         )
 
+        # Dinamik mod için yeni anlatıcı devri
+        if game.get("dynamic_mode"):
+            if user.id not in game.get("opt_out_users", set()):
+                game["narrator_id"] = user.id
+                send_game_message(context, chat_id, prefix_msg=f"🎤 Yeni anlatıcı: {user.first_name}")
+
 def stop(update, context):
     chat_id = update.effective_chat.id
     game = games.get(chat_id)
@@ -262,7 +324,6 @@ def stop(update, context):
 
     admins = context.bot.get_chat_administrators(chat_id)
     admin_ids = [a.user.id for a in admins]
-
     if update.message.from_user.id not in admin_ids:
         update.message.reply_text("Sadece admin durdurabilir.")
         return
@@ -284,10 +345,7 @@ def end_game(context, chat_id):
         ranking += f"{medal[idx-1]} {idx}. {name}: {score} puan\n"
 
     context.bot.send_message(chat_id, ranking)
-
     game["active"] = False
-
-    # RAM TEMİZLİĞİ
     games.pop(chat_id, None)
 
 def eniyiler(update, context):
@@ -318,13 +376,13 @@ def main():
     dp.add_handler(CommandHandler("eniyiler", eniyiler))
     dp.add_handler(CommandHandler("wordcount", wordcount))
 
-    dp.add_handler(CallbackQueryHandler(mode_select, pattern="voice|text_maintenance"))
-    dp.add_handler(CallbackQueryHandler(button, pattern="look|next"))
+    dp.add_handler(CallbackQueryHandler(mode_select, pattern="voice|text_active"))
+    dp.add_handler(CallbackQueryHandler(narrator_type, pattern="static_narrator|dynamic_narrator"))
+    dp.add_handler(CallbackQueryHandler(button, pattern="look|next|opt_out_narrator|be_narrator"))
 
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, guess))
 
     updater.job_queue.run_repeating(timer_check, interval=10)
-
     updater.start_polling()
     updater.idle()
 
