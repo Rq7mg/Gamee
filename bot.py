@@ -33,6 +33,13 @@ def track_group(update):
         "users": update.effective_chat.get_member_count() if hasattr(update.effective_chat, "get_member_count") else 0
     }
 
+def escape_md(text):
+    # MarkdownV2 karakterlerini escape et
+    escape_chars = r'_*[]()~`>#+-=|{}.!'
+    for c in escape_chars:
+        text = text.replace(c, f"\\{c}")
+    return text
+
 def start(update, context):
     track_group(update)
     if context.args:
@@ -160,13 +167,9 @@ def text_mode_select(update, context):
     query = update.callback_query
     query.answer()
     chat_id = query.message.chat.id
-
     current_word, current_hint = pick_word()
 
-    if query.data == "text_fixed":
-        narrator_id = query.from_user.id
-    elif query.data == "text_variable":
-        narrator_id = None  # İlk bilen kişi anlatıcı olacak
+    narrator_id = query.from_user.id if query.data=="text_fixed" else None
 
     games[chat_id] = {
         "active": True,
@@ -190,12 +193,13 @@ def send_game_message(context, chat_id, prefix_msg=""):
     dm_link = f"https://t.me/{bot_username}?start=writeword_{chat_id}"
 
     keyboard = [
-        [InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look")],
         [InlineKeyboardButton("➡️ Kelimeyi Değiştir", callback_data="next"),
          InlineKeyboardButton("✍️ Kelime Yaz", url=dm_link)]
     ]
 
-    if game.get("variable_narrator") and narrator_id is None:
+    if narrator_id:  # sadece anlatıcı görebilir kelimeyi
+        keyboard.insert(0, [InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look")])
+    elif game.get("variable_narrator") and narrator_id is None:
         keyboard.append([InlineKeyboardButton("Anlatıcı olmak istiyorum", callback_data="be_narrator")])
 
     if game["correct_count"] >= 2:
@@ -206,12 +210,12 @@ def send_game_message(context, chat_id, prefix_msg=""):
                 pass
 
     narrator_name = context.bot.get_chat_member(chat_id, narrator_id).user.first_name if narrator_id else "Henüz yok"
-    msg = f"{prefix_msg}\nAnlatıcı: {narrator_name}" if prefix_msg else f"Anlatıcı: {narrator_name}"
+    msg_text = f"{escape_md(prefix_msg)}\nAnlatıcı: {escape_md(narrator_name)}" if prefix_msg else f"Anlatıcı: {escape_md(narrator_name)}"
 
     message = context.bot.send_message(
-        chat_id, msg,
+        chat_id, msg_text,
         reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode=ParseMode.MARKDOWN
+        parse_mode=ParseMode.MARKDOWN_V2
     )
 
     game["last_messages"].append(message.message_id)
@@ -223,18 +227,21 @@ def button(update, context):
     game = games.get(chat_id)
     if not game:
         return
-
     user_id = query.from_user.id
 
     if query.data == "look":
-        query.answer(f"🎯 Kelime: {game['current_word']}\n📌 Tanım: {game['current_hint']}", show_alert=True)
+        if user_id != game.get("narrator_id"):
+            query.answer("Sadece anlatıcı görebilir.", show_alert=True)
+            return
+        query.answer(f"🎯 Kelime: {escape_md(game['current_word'])}\n📌 Tanım: {escape_md(game['current_hint'])}", show_alert=True)
+
     elif query.data == "next":
         game["current_word"], game["current_hint"] = pick_word()
-        query.answer(f"🎯 Yeni kelime: {game['current_word']}\n📌 Tanım: {game['current_hint']}", show_alert=True)
+        query.answer(f"🎯 Yeni kelime: {escape_md(game['current_word'])}\n📌 Tanım: {escape_md(game['current_hint'])}", show_alert=True)
     elif query.data == "be_narrator":
         if game.get("variable_narrator") and game.get("narrator_id") is None:
             game["narrator_id"] = user_id
-            send_game_message(context, chat_id, prefix_msg=f"🎤 {query.from_user.first_name} artık anlatıcı!")
+            send_game_message(context, chat_id, prefix_msg=f"🎤 {escape_md(query.from_user.first_name)} artık anlatıcı!")
             query.answer("✅ Artık anlatıcısınız", show_alert=True)
 
 def guess(update, context):
@@ -269,14 +276,15 @@ def guess(update, context):
             upsert=True
         )
 
-        prefix_msg = f"🎉 {user.first_name} '*{game['current_word']}*' kelimesini doğru bildi!"
+        prefix_msg = f"🎉 {escape_md(user.first_name)} '*{escape_md(game['current_word'])}*' kelimesini doğru bildi!"
         game["current_word"], game["current_hint"] = pick_word()
         send_game_message(context, chat_id, prefix_msg=prefix_msg)
 
         if game.get("narrator_id"):
             context.bot.send_message(
                 game["narrator_id"],
-                f"🎯 Yeni kelime:\n{game['current_word']}\n📌 Tanım: {game['current_hint']}"
+                f"🎯 Yeni kelime:\n{escape_md(game['current_word'])}\n📌 Tanım: {escape_md(game['current_hint'])}",
+                parse_mode=ParseMode.MARKDOWN_V2
             )
 
 def stop(update, context):
@@ -302,14 +310,14 @@ def end_game(context, chat_id):
 
     ranking = "🏆 Lider Tablosu\n\n"
     narrator_name = context.bot.get_chat_member(chat_id, game.get("narrator_id")).user.first_name if game.get("narrator_id") else "Henüz yok"
-    ranking += f"Anlatıcı: {narrator_name}\nKazananlar:\n"
+    ranking += f"Anlatıcı: {escape_md(narrator_name)}\nKazananlar:\n"
 
     sorted_scores = sorted(game["scores"].items(), key=lambda x: x[1], reverse=True)
     for idx, (name, score) in enumerate(sorted_scores, 1):
         medal = ["🥇","🥈","🥉"] + ["🏅"]*7
-        ranking += f"{medal[idx-1]} {idx}. {name}: {score} puan\n"
+        ranking += f"{medal[idx-1]} {idx}. {escape_md(name)}: {score} puan\n"
 
-    context.bot.send_message(chat_id, ranking)
+    context.bot.send_message(chat_id, ranking, parse_mode=ParseMode.MARKDOWN_V2)
     game["active"] = False
     games.pop(chat_id, None)
 
@@ -318,8 +326,8 @@ def eniyiler(update, context):
     msg = "🏆 Global En İyiler\n\n"
     for idx, u in enumerate(top, 1):
         medal = ["🥇","🥈","🥉"] + ["🏅"]*7
-        msg += f"{medal[idx-1]} {idx}. {u['name']} [{u['user_id']}]: {u['score']} puan\n"
-    update.message.reply_text(msg)
+        msg += f"{medal[idx-1]} {idx}. {escape_md(u['name'])} [{u['user_id']}]: {u['score']} puan\n"
+    update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN_V2)
 
 def timer_check(context):
     for chat_id, game in list(games.items()):
