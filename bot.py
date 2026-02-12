@@ -49,7 +49,6 @@ def start(update, context):
         "/game → Oyunu başlatır\n"
         "/stop → Oyunu durdurur (admin)\n"
         "/eniyiler → Global en iyileri gösterir\n"
-        "/wordcount → Toplam kelime sayısını gösterir"
     )
 
     keyboard = [
@@ -130,10 +129,18 @@ def mode_select(update, context):
     query = update.callback_query
     query.answer()
     chat_id = query.message.chat.id
+
+    # AKTİF OYUN KONTROLÜ (FIX)
+    if chat_id in games and games[chat_id]["active"]:
+        query.answer("❌ Bu grupta zaten aktif bir oyun var!", show_alert=True)
+        return
+
     if query.data == "text_maintenance":
         query.answer("⌨️ Yazılı mod şu an bakımda!", show_alert=True)
         return
+
     current_word, current_hint = pick_word()
+
     games[chat_id] = {
         "active": True,
         "mode": query.data,
@@ -145,6 +152,7 @@ def mode_select(update, context):
         "last_messages": [],
         "correct_count": 0
     }
+
     send_game_message(context, chat_id)
 
 def send_game_message(context, chat_id, prefix_msg=""):
@@ -152,27 +160,29 @@ def send_game_message(context, chat_id, prefix_msg=""):
     narrator_id = game["narrator_id"]
     bot_username = context.bot.username
     dm_link = f"https://t.me/{bot_username}?start=writeword_{chat_id}"
+
     keyboard = [
         [InlineKeyboardButton("👀 Kelimeye Bak", callback_data="look")],
         [InlineKeyboardButton("➡️ Kelimeyi Değiştir", callback_data="next"),
          InlineKeyboardButton("✍️ Kelime Yaz", url=dm_link)]
     ]
-    # 2. doğru cevaptan sonra mesaj silme
+
     if game["correct_count"] >= 2:
         for msg_id in game["last_messages"][:2]:
             try:
                 context.bot.delete_message(chat_id, msg_id)
             except:
                 pass
-    if prefix_msg:
-        word_bold = f"*{game['current_word']}*"
-        prefix_msg = prefix_msg.replace(f"'{game['current_word']}'", f"'{word_bold}'")
-        msg = f"{prefix_msg}\nAnlatıcı: {context.bot.get_chat_member(chat_id, narrator_id).user.first_name}"
-    else:
-        msg = f"Anlatıcı: {context.bot.get_chat_member(chat_id, narrator_id).user.first_name}"
+
+    narrator_name = context.bot.get_chat_member(chat_id, narrator_id).user.first_name
+    msg = f"{prefix_msg}\nAnlatıcı: {narrator_name}" if prefix_msg else f"Anlatıcı: {narrator_name}"
+
     message = context.bot.send_message(
-        chat_id, msg, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.MARKDOWN
+        chat_id, msg,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=ParseMode.MARKDOWN
     )
+
     game["last_messages"].append(message.message_id)
     game["last_messages"] = game["last_messages"][-5:]
 
@@ -182,16 +192,19 @@ def button(update, context):
     game = games.get(chat_id)
     if not game:
         return
-    user = query.from_user
-    if user.id != game["narrator_id"]:
+
+    if query.from_user.id != game["narrator_id"]:
         query.answer("Sadece anlatıcı görebilir.", show_alert=True)
         return
+
     game["last_activity"] = time.time()
+
     if query.data == "look":
         query.answer(
             f"🎯 Kelime: {game['current_word']}\n📌 Tanım: {game['current_hint']}",
             show_alert=True
         )
+
     elif query.data == "next":
         game["current_word"], game["current_hint"] = pick_word()
         query.answer(
@@ -203,6 +216,7 @@ def guess(update, context):
     chat_id = update.message.chat.id
     user_id = update.message.from_user.id
     text = update.message.text.strip()
+
     if update.message.chat.type == "private":
         if user_id in pending_dm:
             target_chat = pending_dm[user_id]
@@ -213,26 +227,27 @@ def guess(update, context):
                 context.bot.send_message(user_id, f"🎯 Yeni anlatacağınız kelime: {text}")
             pending_dm.pop(user_id, None)
         return
+
     game = games.get(chat_id)
     if not game or not game["active"]:
         return
+
     if game["current_word"].lower() in text.lower() and user_id != game["narrator_id"]:
         user = update.message.from_user
         user_key = f"{user.first_name}[{user.id}]"
         game["scores"][user_key] = game["scores"].get(user_key, 0) + 1
         game["correct_count"] += 1
-        # MongoDB güncelle
+
         scores_col.update_one(
             {"user_id": user.id},
             {"$inc": {"score": 1}, "$set": {"name": user.first_name}},
             upsert=True
         )
-        # Bildirim mesajı
+
         prefix_msg = f"🎉 {user.first_name} '*{game['current_word']}*' kelimesini doğru bildi!"
-        # Yeni kelime
         game["current_word"], game["current_hint"] = pick_word()
         send_game_message(context, chat_id, prefix_msg=prefix_msg)
-        # Anlatıcıya popup
+
         context.bot.send_message(
             game["narrator_id"],
             f"🎯 Yeni kelime:\n{game['current_word']}\n📌 Tanım: {game['current_hint']}"
@@ -244,26 +259,36 @@ def stop(update, context):
     if not game:
         update.message.reply_text("❌ Bu grupta oyun yok.")
         return
+
     admins = context.bot.get_chat_administrators(chat_id)
     admin_ids = [a.user.id for a in admins]
+
     if update.message.from_user.id not in admin_ids:
         update.message.reply_text("Sadece admin durdurabilir.")
         return
+
     end_game(context, chat_id)
 
 def end_game(context, chat_id):
     game = games.get(chat_id)
     if not game:
         return
+
     ranking = "🏆 Lider Tablosu\n\n"
     narrator_name = context.bot.get_chat_member(chat_id, game["narrator_id"]).user.first_name
     ranking += f"Anlatıcı: {narrator_name}\nKazananlar:\n"
+
     sorted_scores = sorted(game["scores"].items(), key=lambda x: x[1], reverse=True)
     for idx, (name, score) in enumerate(sorted_scores, 1):
         medal = ["🥇","🥈","🥉"] + ["🏅"]*7
         ranking += f"{medal[idx-1]} {idx}. {name}: {score} puan\n"
+
     context.bot.send_message(chat_id, ranking)
+
     game["active"] = False
+
+    # RAM TEMİZLİĞİ
+    games.pop(chat_id, None)
 
 def eniyiler(update, context):
     top = scores_col.find().sort("score", -1).limit(10)
@@ -291,7 +316,7 @@ def main():
     dp.add_handler(CommandHandler("addword", add_word))
     dp.add_handler(CommandHandler("delword", del_word))
     dp.add_handler(CommandHandler("eniyiler", eniyiler))
-    dp.add_handler(CommandHandler("wordcount", wordcount))  # 🆕 eklendi
+    dp.add_handler(CommandHandler("wordcount", wordcount))
 
     dp.add_handler(CallbackQueryHandler(mode_select, pattern="voice|text_maintenance"))
     dp.add_handler(CallbackQueryHandler(button, pattern="look|next"))
