@@ -265,7 +265,7 @@ def game_buttons(update, context):
         except: pass
         
         # Yeni arayüzü çağır (Waiting=True olduğu için Gönüllü butonu atacak)
-        send_game_ui(context, chat_id, "⚠️ *Anlatıcı sırasını saldı!*")
+        send_game_ui(context, chat_id, )
 
 def guess_handler(update, context):
     user = update.message.from_user
