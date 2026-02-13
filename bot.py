@@ -102,7 +102,7 @@ def start(update, context):
     user_id = update.effective_user.id
     if context.args and context.args[0].startswith("writeword_"):
         chat_id = int(context.args[0].split("_")[1])
-        pending_dm[user_id] = chat_id
+        pending_dm[user_id] = target_chat = chat_id
         update.message.reply_text("✍️ Yeni anlatacağınız kelimeyi şimdi yazın.")
         return
 
@@ -129,9 +129,19 @@ def game(update, context):
 
 def mode_select(update, context):
     query = update.callback_query
-    query.answer()
     chat_id = query.message.chat.id
     data = query.data
+
+    # KRİTİK DÜZELTME: Eğer oyun zaten kurulduysa (başka bir butona basıldıysa) işlemi iptal et
+    if chat_id in games:
+        query.answer("⚠️ Oyun zaten başlatıldı!", show_alert=True)
+        try:
+            query.message.delete()
+        except:
+            pass
+        return
+
+    query.answer()
 
     if data == "mode_text_pre":
         kb = [
@@ -159,6 +169,12 @@ def mode_select(update, context):
         "waiting_for_volunteer": False
     }
     
+    # Mesajı düzenleyerek butonları temizle ki tekrar basılmasın
+    try:
+        query.message.delete()
+    except:
+        pass
+        
     send_game_ui(context, chat_id, f"✅ Oyun Başladı! ({'Sesli' if mode=='voice' else 'Yazılı'})")
 
 def game_buttons(update, context):
