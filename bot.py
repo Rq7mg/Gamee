@@ -104,21 +104,16 @@ def send_game_ui(context, chat_id, text_prefix=""):
 def start(update, context):
     db_kayit(update)
     user_id = update.effective_user.id
-    
-    # --- DEĞİŞEN TEK YER: ANLATICI KONTROLÜ ---
     if context.args and context.args[0].startswith("writeword_"):
         try:
             target_chat_id = int(context.args[0].split("_")[1])
-            # Oyun yoksa veya tıklayan kişi o anki anlatıcı değilse engelle
             if target_chat_id not in games or games[target_chat_id]["narrator_id"] != user_id:
                 update.message.reply_text("❌ Sadece o anki aktif anlatıcı özel kelime belirleyebilir.")
                 return
-            
             pending_dm[user_id] = target_chat_id
             update.message.reply_text("✍️ Anlatacağınız özel kelimeyi buraya yazın:")
         except: pass
         return
-    
     update.message.reply_text("🎮 Tabu Botu Aktif!\n/game ile başlatabilirsin.")
 
 def game(update, context):
@@ -131,6 +126,36 @@ def game(update, context):
            InlineKeyboardButton("⌨️ Yazılı Mod", callback_data="mode_text_pre")]]
     update.message.reply_text("🎮 Mod Seçin:", reply_markup=InlineKeyboardMarkup(kb))
 
+# --- STOP KOMUTU (GÜNCELLENEN KISIM) ---
+def stop(update, context):
+    chat_id = update.effective_chat.id
+    if chat_id not in games:
+        update.message.reply_text("❌ Zaten aktif bir oyun yok.")
+        return
+    
+    game_data = games[chat_id]
+    scores = game_data.get("scores", {})
+    
+    # Skorları sırala
+    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    
+    text = "🏁 *OYUN BİTTİ - PUAN DURUMU*\n\n"
+    if not sorted_scores:
+        text += "Bu turda hiç puan toplanmadı\\."
+    else:
+        for idx, (user_key, score) in enumerate(sorted_scores, 1):
+            name = user_key.split("::")[0]
+            text += f"{idx}\\. *{escape_md(name)}*: `{score}` Puan\n"
+    
+    try:
+        update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN_V2)
+    except:
+        update.message.reply_text(text.replace("*", "").replace("`", ""))
+    
+    # Oyunu siliyoruz
+    del games[chat_id]
+
+# --- DİĞER KOMUTLAR ---
 def eniyiler(update, context):
     try:
         top = list(scores_col.find().sort("score", -1).limit(10))
@@ -156,7 +181,7 @@ def duyuru(update, context):
         except: pass
     update.message.reply_text("✅ Gönderildi.")
 
-# --- CALLBACKS ---
+# --- CALLBACKS & HANDLERS ---
 
 def mode_select(update, context):
     query = update.callback_query
@@ -164,7 +189,6 @@ def mode_select(update, context):
     if chat_id in games and not query.data.startswith("mode_text_"):
         query.answer("Oyun zaten başladı.")
         return
-    
     query.answer()
     if query.data == "mode_text_pre":
         kb = [[InlineKeyboardButton("👤 Sabit", callback_data="mode_text_fixed"),
@@ -176,12 +200,9 @@ def mode_select(update, context):
     games[chat_id] = {
         "narrator_id": query.from_user.id,
         "sub_mode": "dynamic" if query.data == "mode_text_dynamic" else "fixed",
-        "current_word": word,
-        "current_hint": hint,
-        "scores": {},
-        "last_activity": time.time(),
-        "waiting_for_volunteer": False,
-        "hint_used": False
+        "current_word": word, "current_hint": hint,
+        "scores": {}, "last_activity": time.time(),
+        "waiting_for_volunteer": False, "hint_used": False
     }
     try: query.message.delete()
     except: pass
@@ -224,18 +245,14 @@ def game_buttons(update, context):
         except: pass
         send_game_ui(context, chat_id)
 
-# --- TAHMİN & ANALİZ ---
-
 def guess_handler(update, context):
     if not update.message or not update.message.text: return
     user = update.message.from_user
     chat_id = update.message.chat.id
     raw_text = update.message.text
     
-    # DM üzerinden özel kelime gönderimi
     if update.message.chat.type == "private" and user.id in pending_dm:
         target = pending_dm[user.id]
-        # Yetki kontrolü (Son ana kadar anlatıcı mı?)
         if target in games and games[target]["narrator_id"] == user.id:
             games[target].update({"current_word": raw_text, "current_hint": "Özel", "hint_used": False})
             update.message.reply_text(f"✅ Kelime ayarlandı: {raw_text}")
@@ -248,7 +265,6 @@ def guess_handler(update, context):
     game_data = games[chat_id]
     if game_data.get("waiting_for_volunteer") or user.id == game_data["narrator_id"]: return
 
-    # Kitap -> Kitaplık analizi
     clean_input = tr_upper(raw_text)
     target_word = tr_upper(game_data["current_word"])
     if target_word in clean_input:
@@ -262,19 +278,6 @@ def guess_handler(update, context):
         
         game_data.update({"current_word": pick_word()[0], "current_hint": pick_word()[1], "hint_used": False, "last_activity": time.time()})
         send_game_ui(context, chat_id, msg)
-
-def stop(update, context):
-    chat_id = update.effective_chat.id
-    if chat_id in games:
-        game_data = games[chat_id]
-        text = "🏁 *OYUN BİTTİ*\n\n"
-        scores = sorted(game_data["scores"].items(), key=lambda x: x[1], reverse=True)
-        if not scores: text = "🛑 Oyun durduruldu."
-        else:
-            for idx, (k, s) in enumerate(scores, 1):
-                text += f"{idx}\\. {escape_md(k.split('::')[0])}: {s} p\n"
-        update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN_V2)
-        del games[chat_id]
 
 def main():
     updater = Updater(TOKEN, use_context=True)
