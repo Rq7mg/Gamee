@@ -5,7 +5,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 import pymongo
 
-# --- LOGGING (Hataları görmek için önemli) ---
+# --- LOGGING ---
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,9 @@ try:
     logger.info("MongoDB bağlantısı başarılı.")
 except Exception as e:
     logger.error(f"MongoDB Bağlantı Hatası: {e}")
+    # Hata durumunda boş objeler oluşturarak botun çökmesini önleyelim
+    words_col = None
+    scores_col = None
 
 # --- GLOBAL DEĞİŞKENLER ---
 sudo_users = set([OWNER_ID])
@@ -42,8 +45,8 @@ def tr_upper(text):
 
 def escape_md(text):
     """MarkdownV2 için kaçış karakterleri."""
-    if not text: return ""
-    text = str(text)
+    if text is None: return ""
+    text = str(text) # Sayı gelirse stringe çevir
     escape_chars = r'_*[]()~`>#+-=|{}.!'
     for c in escape_chars:
         text = text.replace(c, f"\\{c}")
@@ -51,6 +54,7 @@ def escape_md(text):
 
 def pick_word():
     """Veritabanından rastgele kelime çeker."""
+    if words_col is None: return "Veritabanı", "Bağlantı Yok"
     try:
         pipeline = [{"$sample": {"size": 1}}]
         doc = list(words_col.aggregate(pipeline))
@@ -64,22 +68,20 @@ def pick_word():
 # --- OYUN ARAYÜZÜ ---
 
 def send_game_ui(context, chat_id, text_prefix=""):
-    """Oyun durumuna göre butonları ve mesajı gönderir."""
     if chat_id not in games: return
     game_data = games[chat_id]
     
-    # 1. DURUM: Anlatıcı Yok (Sıra salındı veya oyun yeni başladı)
+    # 1. DURUM: Anlatıcı Yok
     if game_data.get("waiting_for_volunteer"):
         kb = [[InlineKeyboardButton("✋ Ben Anlatırım", callback_data="btn_volunteer")]]
         msg = f"{text_prefix}\n⚠️ *Anlatıcı sırasını saldı\\!*\nKim anlatmak ister?"
         try:
             context.bot.send_message(chat_id, msg, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.MARKDOWN_V2)
         except:
-            # Markdown hatası olursa düz metin at
             context.bot.send_message(chat_id, msg.replace("*","").replace("\\",""), reply_markup=InlineKeyboardMarkup(kb))
         return
 
-    # 2. DURUM: Aktif Oyun (Anlatıcı Var)
+    # 2. DURUM: Aktif Oyun
     try:
         user_info = context.bot.get_chat_member(chat_id, game_data["narrator_id"]).user
         name = user_info.first_name
@@ -96,7 +98,6 @@ def send_game_ui(context, chat_id, text_prefix=""):
          InlineKeyboardButton("✍️ Özel Kelime Yaz", url=deep_link)]
     ]
 
-    # Dinamik moddaysa "Sıramı Sal" butonu ekle
     if game_data["sub_mode"] == "dynamic":
         kb.append([InlineKeyboardButton("❌ Sıramı Sal", callback_data="btn_pass")])
 
@@ -107,11 +108,10 @@ def send_game_ui(context, chat_id, text_prefix=""):
     except:
         context.bot.send_message(chat_id, msg.replace("*", "").replace("\\", ""), reply_markup=InlineKeyboardMarkup(kb))
 
-# --- BOT HANDLERS (İŞLEYİCİLER) ---
+# --- BOT HANDLERS ---
 
 def start(update, context):
     user_id = update.effective_user.id
-    # Deep Linking kontrolü (Özel kelime yazma linki)
     if context.args and context.args[0].startswith("writeword_"):
         try:
             target_chat_id = int(context.args[0].split("_")[1])
@@ -146,7 +146,6 @@ def mode_select(update, context):
     chat_id = query.message.chat.id
     data = query.data
     
-    # Çift tıklama veya gecikme kontrolü
     if chat_id in games and not data.startswith("mode_text_"):
         query.answer("⚠️ Oyun zaten başlatıldı!", show_alert=True)
         try: query.message.delete()
@@ -155,14 +154,12 @@ def mode_select(update, context):
     
     query.answer()
     
-    # Yazılı mod alt menüsü
     if data == "mode_text_pre":
         kb = [[InlineKeyboardButton("👤 Sabit Anlatıcı", callback_data="mode_text_fixed"),
                InlineKeyboardButton("🔄 Değişken Anlatıcı", callback_data="mode_text_dynamic")]]
         query.edit_message_text("⌨️ Yazılı Mod: Anlatıcı Tipi Seçin", reply_markup=InlineKeyboardMarkup(kb))
         return
         
-    # Oyun başlatma
     word, hint = pick_word()
     
     mode = "voice" if data == "mode_voice" else "text"
@@ -200,7 +197,6 @@ def game_buttons(update, context):
     game_data = games[chat_id]
     game_data["last_activity"] = time.time()
 
-    # --- BUTTON: GÖNÜLLÜ OL ---
     if query.data == "btn_volunteer":
         if not game_data.get("waiting_for_volunteer"): 
             query.answer("Zaten bir anlatıcı var!", show_alert=True)
@@ -220,38 +216,30 @@ def game_buttons(update, context):
         send_game_ui(context, chat_id, f"🔄 Yeni anlatıcı: *{escape_md(query.from_user.first_name)}*")
         return
 
-    # --- ANLATICI KONTROLÜ ---
-    # Gönüllü butonu dışındaki butonlara sadece anlatıcı basabilir
     if user_id != game_data["narrator_id"]:
         query.answer("❌ Sadece anlatıcı basabilir!", show_alert=True)
         return
 
-    # --- BUTTON: KELİMEYİ GÖR ---
     if query.data == "btn_look":
         query.answer(f"🎯 KELİME: {tr_upper(game_data['current_word'])}\n📌 İPUCU: {game_data['current_hint']}", show_alert=True)
     
-    # --- BUTTON: İPUCU VER ---
     elif query.data == "btn_hint":
         if game_data.get("hint_used"):
             query.answer("⚠️ İpucu zaten kullanıldı!", show_alert=True)
             return
         
         word = game_data['current_word']
-        # İlk harfi göster, kalanı çizgi
         display_hint = tr_upper(word[0]) + " " + "_ " * (len(word) - 1)
         game_data["hint_used"] = True
         
         query.answer("💡 İpucu paylaşıldı!", show_alert=True)
-        # Hata riskini önlemek için Markdown KULLANMADAN gönderiyoruz
         context.bot.send_message(chat_id=chat_id, text=f"💡 İpucu Geldi: {display_hint}\n(Bu kelime artık 0.5 puan!)")
         
-    # --- BUTTON: DEĞİŞTİR (PAS) ---
     elif query.data == "btn_next":
         game_data["current_word"], game_data["current_hint"] = pick_word()
         game_data["hint_used"] = False
         query.answer(f"✅ Değişti!\n🎯 YENİ: {tr_upper(game_data['current_word'])}", show_alert=True)
         
-    # --- BUTTON: SIRAMI SAL ---
     elif query.data == "btn_pass":
         game_data.update({
             "waiting_for_volunteer": True, 
@@ -259,24 +247,18 @@ def game_buttons(update, context):
             "hint_used": False
         })
         query.answer("Sıranı saldın!", show_alert=True)
-        
-        # Eski kontrol panelini sil
         try: query.message.delete()
         except: pass
-        
-        # Yeni arayüzü çağır (Waiting=True olduğu için Gönüllü butonu atacak)
-        send_game_ui(context, chat_id, )
+        send_game_ui(context, chat_id, "")
 
 def guess_handler(update, context):
     user = update.message.from_user
     chat_id = update.message.chat.id
     text = update.message.text.strip()
 
-    # --- DM (ÖZEL MESAJ) İLE KELİME BELİRLEME ---
     if update.message.chat.type == "private":
         if user.id in pending_dm:
             target_chat_id = pending_dm[user.id]
-            # Güvenlik Kontrolü: Kullanıcı gerçekten o grubun anlatıcısı mı?
             if target_chat_id in games:
                 current_game = games[target_chat_id]
                 if current_game.get("narrator_id") == user.id:
@@ -288,46 +270,37 @@ def guess_handler(update, context):
                     context.bot.send_message(user.id, f"✅ Kelime başarıyla ayarlandı: {text}")
                 else:
                     context.bot.send_message(user.id, "❌ Şu an bu grupta anlatıcı siz değilsiniz.")
-            
             pending_dm.pop(user.id, None)
         return
 
-    # --- GRUP İÇİ TAHMİN MANTIĞI ---
     if chat_id not in games: return
     game_data = games[chat_id]
     
-    # Gönüllü bekleniyorsa veya anlatan kişi yazdıysa işlem yapma
     if game_data.get("waiting_for_volunteer") or user.id == game_data["narrator_id"]: 
         return
 
-    # Doğru Tahmin Kontrolü
     if text.lower() == game_data["current_word"].lower():
-        # Puanlama
         point = 0.5 if game_data.get("hint_used") else 1.0
         
-        # Skoru kaydet
         full_key = f"{user.first_name}::{user.id}"
         game_data["scores"][full_key] = game_data["scores"].get(full_key, 0) + point
         
-        # Veritabanı güncelle
-        try:
-            scores_col.update_one(
-                {"user_id": user.id}, 
-                {"$inc": {"score": point}, "$set": {"name": user.first_name}}, 
-                upsert=True
-            )
-        except Exception as e:
-            logger.error(f"Skor DB hatası: {e}")
+        if scores_col:
+            try:
+                scores_col.update_one(
+                    {"user_id": user.id}, 
+                    {"$inc": {"score": point}, "$set": {"name": user.first_name}}, 
+                    upsert=True
+                )
+            except Exception as e:
+                logger.error(f"Skor DB hatası: {e}")
 
-        # Kazanma Mesajı
-        msg = f"🎉 *{escape_md(user.first_name)}* bildi\\! (+{point} Puan)\nKelime: *{tr_upper(game_data['current_word'])}*"
+        msg = f"🎉 *{escape_md(user.first_name)}* bildi\\! (+{escape_md(point)} Puan)\nKelime: *{tr_upper(game_data['current_word'])}*"
         
-        # Dinamik mod ise anlatıcıyı değiştir
         if game_data["sub_mode"] == "dynamic": 
             game_data["narrator_id"] = user.id
             msg += "\n🔄 *Anlatıcı Değişti!*"
         
-        # Yeni kelime seç
         new_w, new_h = pick_word()
         game_data.update({
             "current_word": new_w, 
@@ -339,7 +312,6 @@ def guess_handler(update, context):
         send_game_ui(context, chat_id, msg)
 
 def stop(update, context):
-    """Oyunu durdurur."""
     chat_id = update.effective_chat.id
     user_id = update.message.from_user.id
     
@@ -347,7 +319,6 @@ def stop(update, context):
         update.message.reply_text("❌ Aktif bir oyun yok.")
         return
 
-    # Yetki Kontrolü
     is_auth = False
     if user_id == OWNER_ID: is_auth = True
     else:
@@ -363,7 +334,6 @@ def stop(update, context):
     end_game_logic(context, chat_id)
 
 def end_game_logic(context, chat_id):
-    """Oyun bitirme ve puan tablosu gösterme."""
     if chat_id not in games: return
     game_data = games[chat_id]
     
@@ -375,7 +345,8 @@ def end_game_logic(context, chat_id):
     else:
         for idx, (key, score) in enumerate(sorted_scores, 1):
             name = key.split("::")[0]
-            text += f"{idx}\\. {escape_md(name)}: {score} puan\n"
+            # Puan float olduğu için escape_md'den geçiriyoruz
+            text += f"{idx}\\. {escape_md(name)}: {escape_md(score)} puan\n"
             
     try: context.bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN_V2)
     except: context.bot.send_message(chat_id, text.replace("*","").replace("\\",""))
@@ -383,7 +354,11 @@ def end_game_logic(context, chat_id):
     del games[chat_id]
 
 def eniyiler(update, context):
-    """Global skor tablosu."""
+    """Global skor tablosu (DÜZELTİLDİ)"""
+    if scores_col is None:
+        update.message.reply_text("⚠️ Veritabanı bağlantısı yok.")
+        return
+
     try:
         top = list(scores_col.find().sort("score", -1).limit(15))
         if not top:
@@ -392,12 +367,21 @@ def eniyiler(update, context):
 
         msg = "🏆 *TÜM ZAMANLARIN EN İYİLERİ*\n\n"
         for i, u in enumerate(top, 1):
-            msg += f"{i}\\. {escape_md(u.get('name','Bilinmiyor'))}: {u.get('score',0)} p\n"
+            name = u.get('name','Bilinmiyor')
+            score = u.get('score', 0)
+            
+            # ÖNEMLİ DÜZELTME: score bir sayı (float) olduğu için içinde nokta (.) olabilir.
+            # MarkdownV2 kullanırken bu noktanın da kaçış karakteri ile yazılması gerekir.
+            # escape_md fonksiyonu artık sayıyı stringe çevirip noktayı kaçırıyor.
+            
+            msg += f"{i}\\. {escape_md(name)}: {escape_md(score)} p\n"
+            
         update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN_V2)
+        
     except Exception as e:
-        update.message.reply_text(f"Hata oluştu: {e}")
-
-# --- ADMIN KOMUTLARI ---
+        logger.error(f"Eniyiler Hatası: {e}")
+        # Markdown hatası olursa kullanıcıya en azından düz metin göster
+        update.message.reply_text("Skorlar yüklenirken bir format hatası oluştu, ancak bot çalışmaya devam ediyor.")
 
 def add_sudo(update, context):
     if update.message.from_user.id == OWNER_ID:
@@ -408,6 +392,7 @@ def add_sudo(update, context):
             update.message.reply_text("❌ ID giriniz.")
 
 def add_word(update, context):
+    if words_col is None: return
     if update.message.from_user.id in sudo_users:
         try:
             t = " ".join(context.args)
@@ -426,19 +411,14 @@ def add_word(update, context):
             update.message.reply_text("❌ Format: /addword kelime - ipucu")
 
 def auto_stop_check(context):
-    """Hareketsiz oyunları temizler (5 dakika)."""
     now = time.time()
-    # Listeyi kopyalayarak dönüyoruz çünkü döngü içinde silme yapacağız
     for cid in list(games.keys()):
         if now - games[cid]["last_activity"] > 300:
             try:
                 context.bot.send_message(cid, "💤 Oyun hareketsizlik nedeniyle sonlandırıldı.")
                 end_game_logic(context, cid)
             except:
-                # Bot gruptan atıldıysa sessizce sil
                 del games[cid]
-
-# --- MAIN ---
 
 def main():
     if not TOKEN:
@@ -448,7 +428,6 @@ def main():
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
 
-    # Komutlar
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("game", game))
     dp.add_handler(CommandHandler("stop", stop))
@@ -456,12 +435,10 @@ def main():
     dp.add_handler(CommandHandler("addsudo", add_sudo))
     dp.add_handler(CommandHandler("addword", add_word))
 
-    # Butonlar ve Mesajlar
     dp.add_handler(CallbackQueryHandler(mode_select, pattern="^mode_"))
     dp.add_handler(CallbackQueryHandler(game_buttons, pattern="^btn_"))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, guess_handler))
 
-    # Otomatik Durdurma Görevi (Her 60 saniyede bir kontrol eder)
     updater.job_queue.run_repeating(auto_stop_check, interval=60)
 
     print("Bot çalışıyor...")
