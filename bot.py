@@ -30,7 +30,7 @@ sudo_users = set([OWNER_ID])
 games = {}       
 pending_dm = {}  
 
-# --- TÜRKÇE VE METİN DÜZENLEME ---
+# --- YARDIMCI FONKSİYONLAR (Türkçe Karakter Fix) ---
 def stabilize_text(text):
     if not text: return ""
     text = str(text).strip()
@@ -102,16 +102,36 @@ def start(update, context):
 
 def game(update, context):
     chat_id = update.effective_chat.id
-    if chat_id in games: return update.message.reply_text("⚠️ Oyun zaten sürüyor.")
+    if chat_id in games: 
+        return update.message.reply_text("⚠️ Oyun zaten sürüyor. Eğer butonlar yoksa /stop yazıp tekrar /game yazın.")
+    
     kb = [[InlineKeyboardButton("🎤 Sesli Mod", callback_data="mode_voice"),
            InlineKeyboardButton("⌨️ Yazılı Mod", callback_data="mode_text_pre")]]
-    update.message.reply_text("🎮 Mod Seçin:", reply_markup=InlineKeyboardMarkup(kb))
+    update.message.reply_text("🎮 Oyun Modu Seçin:", reply_markup=InlineKeyboardMarkup(kb))
+
+def stop_game(update, context):
+    chat_id = update.effective_chat.id
+    if chat_id in games:
+        del games[chat_id]
+        update.message.reply_text("🛑 Oyun durduruldu ve hafıza temizlendi.")
+    else:
+        update.message.reply_text("❓ Zaten aktif bir oyun yok.")
+
+def eniyiler(update, context):
+    try:
+        top = list(scores_col.find().sort("score", -1).limit(15))
+        if not top: return update.message.reply_text("📭 Henüz veri yok.")
+        msg = "🏆 *TÜM ZAMANLARIN EN İYİLERİ*\n\n"
+        for i, u in enumerate(top, 1):
+            msg += f"{i}\\. {escape_md(u.get('name','Bilinmiyor'))}: {escape_md(u.get('score',0))} p\n"
+        update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN_V2)
+    except: update.message.reply_text("Skorlar yüklenemedi.")
 
 # --- ADMIN KOMUTLARI ---
 def duyuru(update, context):
     if update.effective_user.id != OWNER_ID: return
     msg = update.message.reply_to_message
-    if not msg: return update.message.reply_text("Bir mesajı yanıtlayın.")
+    if not msg: return update.message.reply_text("Yanıtla!")
     chats = list(chats_col.find({"active": True}))
     success = 0
     for chat in chats:
@@ -124,14 +144,18 @@ def duyuru(update, context):
 
 def stats(update, context):
     if update.effective_user.id not in sudo_users: return
-    total = chats_col.count_documents({})
-    update.message.reply_text(f"📊 Grup: {total}\n🎮 Aktif Oyun: {len(games)}")
+    update.message.reply_text(f"📊 Grup: {chats_col.count_documents({})}\n🎮 Aktif: {len(games)}")
 
-def word_count(update, context):
+def addword(update, context):
     if update.effective_user.id not in sudo_users: return
-    update.message.reply_text(f"📚 Toplam Kelime: {words_col.count_documents({})}")
+    try:
+        content = " ".join(context.args)
+        word, hint = content.split("-", 1)
+        words_col.update_one({"word": word.strip().lower()}, {"$set": {"hint": hint.strip()}}, upsert=True)
+        update.message.reply_text(f"✅ Eklendi: {word.strip().upper()}")
+    except: update.message.reply_text("/addword kelime - ipucu")
 
-# --- CALLBACK İŞLEMCİSİ ---
+# --- CALLBACK İŞLEMCİSİ (HATA FİX) ---
 def handle_callbacks(update, context):
     query = update.callback_query
     data = query.data
@@ -151,17 +175,16 @@ def handle_callbacks(update, context):
         send_game_ui(context, chat_id, "✅ Oyun Başladı!")
 
     elif data.startswith("btn_"):
-        if chat_id not in games: return query.answer("Oyun aktif değil.")
+        if chat_id not in games: return query.answer("Oyun aktif değil. /game yazın.", show_alert=True)
         game_data = games[chat_id]
         
         if data == "btn_volunteer":
-            if not game_data.get("waiting_for_volunteer"): return query.answer()
             game_data.update({"narrator_id": user_id, "waiting_for_volunteer": False, "hint_used": False, "current_word": pick_word()[0], "current_hint": pick_word()[1]})
             query.message.delete()
             send_game_ui(context, chat_id, f"🔄 Yeni Anlatıcı: {query.from_user.first_name}")
             return
 
-        if user_id != game_data["narrator_id"]: return query.answer("⚠️ Sadece anlatıcı basabilir!", show_alert=True)
+        if user_id != game_data["narrator_id"]: return query.answer("⚠️ Sadece anlatıcı!", show_alert=True)
 
         if data == "btn_look":
             query.answer(f"🎯 KELİME: {stabilize_text(game_data['current_word'])}\n📌 İPUCU: {game_data['current_hint']}", show_alert=True)
@@ -172,7 +195,7 @@ def handle_callbacks(update, context):
         elif data == "btn_next":
             game_data["current_word"], game_data["current_hint"] = pick_word()
             game_data["hint_used"] = False
-            query.answer("Yeni Kelime Geldi", show_alert=True)
+            query.answer("Kelime Değiştirildi", show_alert=True)
         elif data == "btn_pass":
             game_data.update({"waiting_for_volunteer": True, "narrator_id": None})
             query.message.delete()
@@ -186,9 +209,9 @@ def guess_handler(update, context):
 
     if update.message.chat.type == "private" and user_id in pending_dm:
         target = pending_dm[user_id]
-        if target in games and games[target]["narrator_id"] == user_id:
+        if target in games:
             games[target].update({"current_word": input_text, "current_hint": "Özel", "hint_used": False})
-            update.message.reply_text(f"✅ Ayarlandı: {input_text}")
+            update.message.reply_text(f"✅ Kelime ayarlandı: {input_text}")
         pending_dm.pop(user_id, None)
         return
 
@@ -199,11 +222,10 @@ def guess_handler(update, context):
     if input_text == stabilize_text(game_data["current_word"]):
         point = 0.5 if game_data["hint_used"] else 1.0
         name = update.effective_user.first_name
-        key = f"{name}::{user_id}"
-        game_data["scores"][key] = game_data["scores"].get(key, 0) + point
+        game_data["scores"][f"{name}::{user_id}"] = game_data["scores"].get(f"{name}::{user_id}", 0) + point
         if scores_col: scores_col.update_one({"user_id": user_id}, {"$inc": {"score": point}, "$set": {"name": name}}, upsert=True)
         
-        msg = f"🎉 *{escape_md(name)}* bildi\\! (+{escape_md(point)} Puan)\nKelime: *{input_text}*"
+        msg = f"🎉 *{escape_md(name)}* bildi\\! (+{escape_md(point)})\nKelime: *{input_text}*"
         if game_data["sub_mode"] == "dynamic": game_data["narrator_id"] = user_id
         game_data["current_word"], game_data["current_hint"] = pick_word()
         game_data["hint_used"] = False
@@ -212,20 +234,27 @@ def guess_handler(update, context):
 def auto_stop(context):
     for cid in list(games.keys()):
         if time.time() - games[cid].get("last_activity", 0) > 300:
-            try: context.bot.send_message(cid, "💤 5 dk hareketsizlik. Oyun bitti.")
+            try: context.bot.send_message(cid, "💤 5 dk hareketsizlik nedeniyle oyun kapatıldı.")
             except: pass
             del games[cid]
 
+# --- MAIN ---
 def main():
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("game", game))
+    dp.add_handler(CommandHandler("stop", stop_game))
+    dp.add_handler(CommandHandler("eniyiler", eniyiler))
     dp.add_handler(CommandHandler("duyuru", duyuru))
     dp.add_handler(CommandHandler("stats", stats))
-    dp.add_handler(CommandHandler("wordcount", word_count))
+    dp.add_handler(CommandHandler("addword", addword))
+    
+    # TEK CALLBACK HANDLER (Çakışma Fix)
     dp.add_handler(CallbackQueryHandler(handle_callbacks))
+    
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, guess_handler))
+    
     updater.job_queue.run_repeating(auto_stop, interval=60)
     updater.start_polling()
     updater.idle()
