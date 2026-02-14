@@ -43,17 +43,20 @@ def tr_upper(text):
     return text.upper()
 
 def escape_html(text):
-    """HTML formatında isimlerin bozulmasını engeller."""
     if not text: return "Bilinmiyor"
     return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 def pick_word():
+    """Veritabanından birbirine bağlı kelime ve ipucunu tek seferde çeker."""
     try:
         pipeline = [{"$sample": {"size": 1}}]
         doc = list(words_col.aggregate(pipeline))
-        if doc: return doc[0]["word"], doc[0]["hint"]
+        if doc and "word" in doc[0] and "hint" in doc[0]:
+            return doc[0]["word"], doc[0]["hint"]
         return "kitap", "okunan nesne"
-    except: return "kitap", "okunan nesne"
+    except Exception as e:
+        logger.error(f"Kelime çekme hatası: {e}")
+        return "kitap", "okunan nesne"
 
 def db_kayit(update):
     try:
@@ -215,17 +218,15 @@ def game_buttons(update, context):
         game_data["hint_used"] = True
         context.bot.send_message(chat_id, f"💡 İpucu: {tr_upper(word[0])} " + "_ " * (len(word) - 1))
     
-    # --- BURADA KELİME DEĞİŞTİRME ÖZELLİĞİNİ GÜNCELLEDİM ---
     elif query.data == "btn_next":
         new_word, new_hint = pick_word()
         game_data["current_word"] = new_word
         game_data["current_hint"] = new_hint
         game_data["hint_used"] = False
         
-        # Sadece anlatıcıya popup olarak YENİ kelimeyi ve tanımı gösteriyoruz
+        # ANLATICIYA POPUP GÖSTER
         query.answer(f"🔄 Kelime Değişti!\n🎯 YENİ: {tr_upper(new_word)}\n📌 TANIM: {new_hint}", show_alert=True)
         
-        # Mesajı da güncelle ki grupta "Değiştirildi" bilgisi kalsın
         try:
             name = escape_html(query.from_user.first_name)
             msg = f"🔄 Kelime değiştirildi!\n🗣 Anlatıcı: <b>{name}</b>"
@@ -267,7 +268,10 @@ def guess_handler(update, context):
         scores_col.update_one({"user_id": user.id}, {"$inc": {"score": point}, "$set": {"name": name}}, upsert=True)
         msg = f"🎉 <b>{escape_html(name)}</b> bildi! (+{point})\nKelime: <b>{target_word}</b>"
         if game_data["sub_mode"] == "dynamic": game_data["narrator_id"] = user.id
-        game_data.update({"current_word": pick_word()[0], "current_hint": pick_word()[1], "hint_used": False, "last_activity": time.time()})
+        
+        # BİLİNDİĞİNDE YENİ KELİME-İPUCU EŞLEŞMESİ
+        w, h = pick_word()
+        game_data.update({"current_word": w, "current_hint": h, "hint_used": False, "last_activity": time.time()})
         send_game_ui(context, chat_id, msg)
 
 def main():
@@ -287,4 +291,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
